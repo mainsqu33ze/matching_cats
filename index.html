@@ -1,0 +1,1897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Meow Match - 29 Levels of Cat Puzzles!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            overflow: hidden;
+        }
+        
+        .game-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            padding: 20px;
+            max-width: 400px;
+            width: 100%;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        
+        .header h1 {
+            font-size: 1.8em;
+            color: #764ba2;
+            margin-bottom: 5px;
+        }
+        
+        .header .subtitle {
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .stats-bar {
+            display: flex;
+            justify-content: space-around;
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-label {
+            font-size: 0.75em;
+            color: #888;
+            text-transform: uppercase;
+        }
+        
+        .stat-value {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .powers-bar {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+        
+        .power-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border: 2px solid #ddd;
+            border-radius: 12px;
+            background: white;
+            font-size: 0.95em;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #555;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .power-btn.active {
+            border-color: #764ba2;
+            background: #f3e8ff;
+            color: #764ba2;
+            box-shadow: 0 0 12px rgba(118,75,162,0.4);
+        }
+        
+        .power-btn:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+        
+        .power-btn:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+        
+        .power-count {
+            background: #764ba2;
+            color: white;
+            border-radius: 50%;
+            min-width: 20px;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        
+        .power-btn:disabled .power-count {
+            background: #ccc;
+        }
+        
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            border-radius: 10px;
+            background: #f9f9f9;
+            touch-action: none;
+        }
+        
+        .level-progress {
+            margin-top: 15px;
+            text-align: center;
+        }
+        
+        .progress-bar {
+            height: 12px;
+            background: #e0e0e0;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s ease;
+        }
+        
+        .progress-fill.boss-mode {
+            background: linear-gradient(90deg, #e74c3c, #e67e22);
+        }
+        
+        .boss-banner {
+            text-align: center;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin: -5px 0 12px;
+            color: #888;
+            min-height: 18px;
+        }
+        
+        .boss-banner.warning {
+            color: #c0392b;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .boss-banner.boss-fight {
+            color: #c0392b;
+            font-size: 1em;
+            text-shadow: 0 0 10px rgba(231, 76, 60, 0.4);
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .level-code {
+            text-align: center;
+            font-size: 0.85em;
+            color: #666;
+            margin: -5px 0 10px;
+        }
+        
+        .level-code .code-val {
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: #d35400;
+            font-family: "SF Mono", Menlo, monospace;
+            font-size: 1.1em;
+        }
+        
+        .code-entry {
+            margin-top: 15px;
+        }
+        
+        .code-entry input {
+            width: 140px;
+            padding: 12px;
+            font-size: 1.5em;
+            text-align: center;
+            letter-spacing: 8px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-family: "SF Mono", Menlo, monospace;
+        }
+        
+        .code-entry input:focus {
+            outline: none;
+            border-color: #764ba2;
+        }
+        
+        .code-err {
+            color: #c0392b;
+            font-size: 0.85em;
+            min-height: 16px;
+            margin-top: 6px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1em;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 15px;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: scale(0.98);
+        }
+        
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        
+        .overlay.hidden {
+            display: none;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .modal {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            max-width: 320px;
+            width: 90%;
+        }
+        
+        .modal h2 {
+            color: #764ba2;
+            margin-bottom: 15px;
+        }
+        
+        .modal p {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        
+        .cats-preview {
+            font-size: 2em;
+            margin: 15px 0;
+        }
+        
+        .instructions {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: left;
+            font-size: 0.9em;
+            color: #555;
+        }
+        
+        .instructions h3 {
+            color: #764ba2;
+            margin-bottom: 10px;
+        }
+        
+        .instructions ul {
+            margin-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <h1>&#128049; Meow Match &#128049;</h1>
+            <div class="subtitle">29 Levels for 29 Years of Amazing!</div>
+        </div>
+        
+        <div class="stats-bar">
+            <div class="stat">
+                <div class="stat-label">Level</div>
+                <div class="stat-value" id="levelDisplay">1</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Score</div>
+                <div class="stat-value" id="scoreDisplay">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Moves</div>
+                <div class="stat-value" id="movesDisplay">20</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Goal</div>
+                <div class="stat-value" id="goalDisplay">500</div>
+            </div>
+        </div>
+        
+        <div class="boss-banner" id="bossBanner"></div>
+        
+        <div class="level-code" id="levelCode"></div>
+        
+        <div class="powers-bar" id="powersBar">
+            <button class="power-btn" id="boxPowerBtn" disabled>&#128230; Box <span class="power-count" id="boxCount">0</span></button>
+            <button class="power-btn" id="tunaPowerBtn" disabled>&#127843; Tuna <span class="power-count" id="tunaCount">0</span></button>
+            <button class="power-btn" id="slotPowerBtn" disabled>&#127920; Slot <span class="power-count" id="slotCount">0</span></button>
+        </div>
+        
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="level-progress">
+            <span id="progressText">0% to next level</span>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+        </div>
+        
+        <button class="btn" id="newGameBtn">New Game</button>
+    </div>
+    
+    <div class="overlay" id="welcomeOverlay">
+        <div class="modal">
+            <h2>Welcome to Meow Match!</h2>
+            <div class="cats-preview">&#128049; &#128570; &#128568;</div>
+            <p>Match 3 or more cats in a row to score points!</p>
+            <div class="instructions">
+                <h3>How to Play:</h3>
+                <ul>
+                    <li>Tap a cat, then tap an adjacent cat to swap</li>
+                    <li>Or swipe to swap cats</li>
+                    <li>Match 3+ identical cats to score</li>
+                    <li>Match 4 cats = &#128230; Box power!</li>
+                    <li>Match 5 cats = &#127843; Tuna power!</li>
+                    <li>Match 6+ cats = &#127920; Slot Machine power!</li>
+                    <li>Powers carry over between levels!</li>
+                    <li>Reach the goal score to advance</li>
+                    <li>Beat 28 levels to face the FINAL BOSS!</li>
+                    <li>Points add to your total at the end of every level!</li>
+                    <li>Jot down your save code to pick up where you left off!</li>
+                </ul>
+            </div>
+            <button class="btn" id="startBtn">Start Playing!</button>
+            <button class="btn hidden" id="resumeSaveBtn"></button>
+            <div class="code-entry">
+                <p style="margin: 0 0 8px; color: #888; font-size: 0.9em;">Have a code? Enter it to jump back in:</p>
+                <input type="text" id="codeInput" maxlength="9" placeholder="17-003400" inputmode="numeric" pattern="[0-9-]*" autocomplete="off">
+                <br>
+                <button class="btn" id="resumeBtn" style="margin-top: 10px;">Resume Game</button>
+                <div class="code-err" id="codeErr"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="overlay hidden" id="levelCompleteOverlay">
+        <div class="modal">
+            <h2 id="levelCompleteTitle">Level Complete!</h2>
+            <div class="cats-preview" id="completeEmoji">&#128570;</div>
+            <p id="levelCompleteMessage">Great job!</p>
+            <div class="stat" style="margin: 15px 0;">
+                <div class="stat-label">Points This Level</div>
+                <div class="stat-value" id="finalScore">0</div>
+            </div>
+            <div class="stat" style="margin: 0 0 15px 0;">
+                <div class="stat-label">Total Points</div>
+                <div class="stat-value" id="finalTotal" style="color: #764ba2;">0</div>
+            </div>
+            <button class="btn" id="nextLevelBtn">Next Level</button>
+        </div>
+    </div>
+    
+    <div class="overlay hidden" id="gameOverOverlay">
+        <div class="modal">
+            <h2>Out of Moves!</h2>
+            <div class="cats-preview">&#128049; &#128568; &#128570;</div>
+            <p>Don't give up! Try again!</p>
+            <button class="btn" id="retryBtn">Try Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Cat types with emojis (unicode escapes so they can't be mangled)
+        const CAT_TYPES = [
+            '\u{1F431}', // cat face
+            '\u{1F63A}', // smiling cat with open mouth
+            '\u{1F638}', // grinning cat with smiling eyes
+            '\u{1F63B}', // smiling cat with heart-eyes
+            '\u{1F63C}', // cat with wry smile
+            '\u{1F63D}', // kissing cat
+            '\u{1F640}', // weary cat
+            '\u{1F63E}'  // pouting cat
+        ];
+        
+        // Custom art: drop PNGs in assets/cats/cat0.png ... cat7.png and they
+        // auto-load to replace the emojis. Missing files fall back to emoji.
+        // Square PNGs (256x256 recommended) with transparent backgrounds.
+        const CAT_ART = [];
+        function loadCatArt() {
+            if (typeof Image === 'undefined') return;
+            for (let i = 0; i < CAT_TYPES.length; i++) {
+                const img = new Image();
+                img.onload = function () { CAT_ART[i] = this; };
+                img.onerror = function () { CAT_ART[i] = null; };
+                img.src = 'assets/cats/cat' + i + '.png';
+            }
+        }
+        function drawTileArt(type, cx, cy, sizePx, alpha) {
+            const g = game.ctx;
+            const img = CAT_ART[type];
+            if (img) {
+                g.save();
+                g.globalAlpha = alpha;
+                g.drawImage(img, cx - sizePx / 2, cy - sizePx / 2, sizePx, sizePx);
+                g.restore();
+                return;
+            }
+            g.save();
+            g.globalAlpha = alpha;
+            g.font = sizePx + 'px Arial';
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.fillText(CAT_TYPES[type], cx, cy);
+            g.restore();
+        }
+        
+        // Game state
+        const game = {
+            canvas: null,
+            ctx: null,
+            gridSize: 6,
+            grid: [],
+            tileSize: 0,
+            score: 0,
+            totalScore: 0,
+            levelCleared: false,
+            moves: 30,
+            currentLevel: 1,
+            goalScore: 500,
+            selectedCat: null,
+            isAnimating: false,
+            comboMultiplier: 1,
+            particles: [],
+            particleTickRunning: false,
+            levelConfigs: [],
+            powers: { box: 0, tuna: 0, slot: 0 },
+            activePower: null,
+            powerTargetPreview: null
+        };
+        
+        // Generate 29 level configurations
+        function generateLevelConfigs() {
+            const configs = [];
+            for (let i = 1; i <= 29; i++) {
+                let gridSize, numCatTypes, moves, goal, hasSpecials;
+                
+                if (i <= 5) {
+                    // Levels 1-5: Tutorial/Easy
+                    gridSize = 5;
+                    numCatTypes = 4;
+                    moves = 25 + Math.floor(i * 2);
+                    goal = 300 + (i * 100);
+                    hasSpecials = true;
+                } else if (i <= 10) {
+                    // Levels 6-10: Getting harder
+                    gridSize = 6;
+                    numCatTypes = 5;
+                    moves = 25 + Math.floor((i-5) * 1.5);
+                    goal = 500 + ((i-5) * 150);
+                    hasSpecials = true;
+                } else if (i <= 15) {
+                    // Levels 11-15: Medium
+                    gridSize = 6;
+                    numCatTypes = 5;
+                    moves = 22 + Math.floor((i-10) * 1);
+                    goal = 700 + ((i-10) * 200);
+                    hasSpecials = true;
+                } else if (i <= 20) {
+                    // Levels 16-20: Hard
+                    gridSize = 7;
+                    numCatTypes = 6;
+                    moves = 20 + Math.floor((i-15) * 0.5);
+                    goal = 900 + ((i-15) * 250);
+                    hasSpecials = true;
+                } else if (i <= 25) {
+                    // Levels 21-25: Very Hard
+                    gridSize = 7;
+                    numCatTypes = 6;
+                    moves = 18 + Math.floor((i-20) * 0.5);
+                    goal = 1200 + ((i-20) * 300);
+                    hasSpecials = true;
+                } else {
+                    // Levels 26-29: Expert
+                    gridSize = 8;
+                    numCatTypes = 7;
+                    moves = 18;
+                    goal = 1500 + ((i-25) * 400);
+                    hasSpecials = true;
+                }
+                
+                configs.push({
+                    level: i,
+                    gridSize: gridSize,
+                    numCatTypes: Math.min(numCatTypes, CAT_TYPES.length),
+                    moves: moves,
+                    goal: goal,
+                    hasSpecials: hasSpecials,
+                    name: getLevelName(i)
+                });
+            }
+            return configs;
+        }
+        
+        function getLevelName(level) {
+            const names = [
+                "First Steps", "Getting Warmed Up", "Easy Peasy", "Cat Nap", "Purrfect Start",
+                "Leveling Up", "Climbing High", "Stretch Goal", "Agile Cat", "Quick Paws",
+                "Medium Rare", "Halfway There!", "Speed Demon", "Combo Master", "Feline Fine",
+                "Hard Ball", "Tough Cookie", "Cat-astrophe", "Clawing Back", "Nine Lives",
+                "Expert Zone", "Paw-some!", "Meow-nificent", "Cat-astrophic", "Purrfect Score",
+                "Legendary", "Mythic", "Epic Win", "Grand Finale"
+            ];
+            return names[level - 1] || `Level ${level}`;
+        }
+        
+        // Initialize game
+        function initGame() {
+            game.canvas = document.getElementById('gameCanvas');
+            game.ctx = game.canvas.getContext('2d');
+            game.levelConfigs = generateLevelConfigs();
+            
+            loadCatArt();
+            resetPowers();
+            setupCanvas();
+            // Don't overwrite a stored save with the initial level-1 load behind the welcome screen
+            game.suppressSave = true;
+            loadLevel(game.currentLevel);
+            game.suppressSave = false;
+            setupEventListeners();
+        }
+        
+        function setupCanvas() {
+            const container = document.querySelector('.game-container');
+            // Size canvas to fit both width and available height (mobile-friendly)
+            const maxWidth = Math.min(container.clientWidth - 40, 380);
+            const headerH = 90, statsH = 55, progressH = 45, buttonH = 50;
+            const containerTop = (container.getBoundingClientRect && container.getBoundingClientRect().top) || 0;
+            const availHeight = window.innerHeight - containerTop - headerH - statsH - progressH - buttonH - 30;
+            const maxWidthFinal = Math.max(220, Math.min(maxWidth, availHeight));
+            const dpr = window.devicePixelRatio || 1;
+            
+            // Internal resolution scaled for retina displays
+            game.canvas.width = Math.round(maxWidthFinal * dpr);
+            game.canvas.height = Math.round(maxWidthFinal * dpr);
+            
+            // CSS size in logical pixels
+            game.canvas.style.width = maxWidthFinal + 'px';
+            game.canvas.style.height = maxWidthFinal + 'px';
+            
+            game.tileSize = maxWidthFinal / game.gridSize;
+            game.dpr = dpr;
+        }
+        
+        function loadLevel(level) {
+            const config = game.levelConfigs[level - 1];
+            game.gridSize = config.gridSize;
+            game.moves = config.moves;
+            game.goalScore = config.goal;
+            game.score = 0;
+            game.comboMultiplier = 1;
+            game.levelCleared = false;
+            game.activePower = null;
+            game.powerTargetPreview = null;
+            
+            setupCanvas();
+            generateGrid(config.numCatTypes);
+            removeInitialMatches(config.numCatTypes);
+            
+            updateUI();
+            updatePowerUI();
+            updateBossBanner();
+            updateLevelCode();
+            if (!game.suppressSave) saveProgress();
+            
+            document.getElementById('levelDisplay').textContent = level;
+            const subtitle = document.querySelector('.header .subtitle');
+            if (level === 29) {
+                subtitle.textContent = `\u{1F479} FINAL BOSS: ${config.name}`;
+                subtitle.style.color = '#c0392b';
+                subtitle.style.fontWeight = 'bold';
+            } else {
+                subtitle.textContent = `Level ${level}: ${config.name}`;
+                subtitle.style.color = '';
+                subtitle.style.fontWeight = '';
+            }
+            document.getElementById('nextLevelBtn').textContent = 'Next Level';
+            document.getElementById('nextLevelBtn').onclick = () => {
+                document.getElementById('levelCompleteOverlay').classList.add('hidden');
+                game.currentLevel = Math.min(game.currentLevel + 1, 29);
+                loadLevel(game.currentLevel);
+            };
+            
+            render();
+        }
+        
+        function resetPowers() {
+            game.powers = { box: 0, tuna: 0, slot: 0 };
+            game.activePower = null;
+            game.powerTargetPreview = null;
+            updatePowerUI();
+        }
+        
+        function updateBossBanner() {
+            const banner = document.getElementById('bossBanner');
+            banner.className = 'boss-banner';
+            if (game.currentLevel === 29) {
+                banner.textContent = '\u{1F479} FINAL BOSS! Defeat the Boss Cat before you run out of moves!';
+                banner.className = 'boss-banner boss-fight';
+            } else if (game.currentLevel === 28) {
+                banner.textContent = '\u{1F63C} The Boss is NEXT! One more level to the final showdown!';
+                banner.className = 'boss-banner warning';
+            } else {
+                const left = 29 - game.currentLevel;
+                banner.textContent = `\u{1F479} Boss fight in ${left} more level${left === 1 ? '' : 's'}!`;
+            }
+        }
+        
+        function generateGrid(numCatTypes) {
+            game.grid = [];
+            for (let row = 0; row < game.gridSize; row++) {
+                game.grid[row] = [];
+                for (let col = 0; col < game.gridSize; col++) {
+                    game.grid[row][col] = {
+                        type: Math.floor(Math.random() * numCatTypes),
+                        x: col * game.tileSize,
+                        y: row * game.tileSize,
+                        scale: 1,
+                        alpha: 1,
+                        matched: false
+                    };
+                }
+            }
+        }
+        
+        function removeInitialMatches(numCatTypes) {
+            let hasMatches = true;
+            let attempts = 0;
+            
+            while (hasMatches && attempts < 100) {
+                hasMatches = false;
+                attempts++;
+                
+                for (let row = 0; row < game.gridSize; row++) {
+                    for (let col = 0; col < game.gridSize; col++) {
+                        const type = game.grid[row][col].type;
+                        
+                        // Check horizontal
+                        if (col >= 2 && 
+                            game.grid[row][col-1].type === type && 
+                            game.grid[row][col-2].type === type) {
+                            game.grid[row][col].type = (type + 1) % numCatTypes;
+                            hasMatches = true;
+                        }
+                        
+                        // Check vertical
+                        if (row >= 2 && 
+                            game.grid[row-1][col].type === type && 
+                            game.grid[row-2][col].type === type) {
+                            game.grid[row][col].type = (type + 1) % numCatTypes;
+                            hasMatches = true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        function setupEventListeners() {
+            // Touch events
+            game.canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            game.canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+            game.canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+            
+            // Mouse events for desktop testing
+            game.canvas.addEventListener('mousedown', handleMouseDown);
+            game.canvas.addEventListener('mousemove', handleMouseMove);
+            game.canvas.addEventListener('mouseup', handleMouseUp);
+            
+            // Buttons
+            document.getElementById('startBtn').addEventListener('click', () => {
+                document.getElementById('welcomeOverlay').classList.add('hidden');
+                saveProgress();
+            });
+            
+            document.getElementById('newGameBtn').addEventListener('click', () => {
+                game.currentLevel = 1;
+                game.totalScore = 0;
+                resetPowers();
+                loadLevel(1);
+            });
+            
+            document.getElementById('retryBtn').addEventListener('click', () => {
+                document.getElementById('gameOverOverlay').classList.add('hidden');
+                loadLevel(game.currentLevel);
+            });
+            
+            document.getElementById('boxPowerBtn').addEventListener('click', () => {
+                activatePower('box');
+            });
+            
+            document.getElementById('tunaPowerBtn').addEventListener('click', () => {
+                activatePower('tuna');
+            });
+            
+            document.getElementById('slotPowerBtn').addEventListener('click', () => {
+                activatePower('slot');
+            });
+            
+            // Save-code resume
+            const codeInput = document.getElementById('codeInput');
+            const codeErr = document.getElementById('codeErr');
+            
+            function resumeFromCode() {
+                const decoded = decodeLevelCode(codeInput.value);
+                if (!decoded) {
+                    codeErr.textContent = 'Enter a valid code, like 17-003400.';
+                    return;
+                }
+                codeErr.textContent = '';
+                codeInput.value = '';
+                game.currentLevel = decoded.level;
+                game.totalScore = decoded.total;
+                // If this browser already saved powers for this level, restore them too
+                const savedHere = loadProgress();
+                game.powers = (savedHere && savedHere.level === decoded.level)
+                    ? { box: savedHere.box || 0, tuna: savedHere.tuna || 0, slot: savedHere.slot || 0 }
+                    : { box: 0, tuna: 0, slot: 0 };
+                document.getElementById('welcomeOverlay').classList.add('hidden');
+                loadLevel(game.currentLevel);
+                saveProgress();
+            }
+            
+            document.getElementById('resumeBtn').addEventListener('click', resumeFromCode);
+            codeInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') resumeFromCode();
+            });
+            codeInput.addEventListener('input', () => {
+                // Keep only digits (max 8), re-insert the dash after the level for readability
+                const digits = codeInput.value.replace(/[^0-9]/g, '').slice(0, 8);
+                codeInput.value = digits.length > 2 ? digits.slice(0, 2) + '-' + digits.slice(2) : digits;
+            });
+            
+            // Auto "welcome back" resume from a previously saved spot
+            const resumeSaveBtn = document.getElementById('resumeSaveBtn');
+            const saved = loadProgress();
+            if (saved && saved.level > 1) {
+                resumeSaveBtn.textContent = `Welcome back! Resume Level ${saved.level}`;
+                resumeSaveBtn.classList.remove('hidden');
+                resumeSaveBtn.addEventListener('click', () => {
+                    game.currentLevel = saved.level;
+                    game.totalScore = saved.total || 0;
+                    game.powers = { box: saved.box || 0, tuna: saved.tuna || 0, slot: saved.slot || 0 };
+                    document.getElementById('welcomeOverlay').classList.add('hidden');
+                    loadLevel(game.currentLevel);
+                });
+            }
+            
+            window.addEventListener('resize', () => {
+                setupCanvas();
+                render();
+            });
+        }
+        
+        let touchStartPos = null;
+        let touchStartTile = null;
+        
+        function handleTouchStart(e) {
+            e.preventDefault();
+            if (game.isAnimating) return;
+            
+            const touch = e.touches[0];
+            const rect = game.canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            touchStartPos = { x, y };
+            touchStartTile = getTileAt(x, y);
+            
+            // Live preview for tuna/box power while tapping
+            if ((game.activePower === 'tuna' || game.activePower === 'box') && touchStartTile) {
+                game.powerTargetPreview = touchStartTile;
+                render();
+            }
+        }
+        
+        function handleTouchMove(e) {
+            e.preventDefault();
+            
+            // Update preview as finger drags
+            if (game.activePower === 'tuna' || game.activePower === 'box') {
+                const touch = e.touches[0];
+                const rect = game.canvas.getBoundingClientRect();
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+                const tile = getTileAt(x, y);
+                if (tile) {
+                    game.powerTargetPreview = tile;
+                    render();
+                }
+            }
+        }
+        
+        function handleTouchEnd(e) {
+            e.preventDefault();
+            if (game.isAnimating || !touchStartPos) return;
+            
+            const touch = e.changedTouches[0];
+            const rect = game.canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            const endTile = getTileAt(x, y);
+            
+            game.powerTargetPreview = null;
+            
+            if (touchStartTile && endTile) {
+                const dx = x - touchStartPos.x;
+                const dy = y - touchStartPos.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > game.tileSize * 0.3) {
+                    // Swipe
+                    const direction = getSwipeDirection(dx, dy);
+                    const targetTile = getAdjacentTile(touchStartTile.row, touchStartTile.col, direction);
+                    
+                    if (targetTile) {
+                        selectAndSwap(touchStartTile.row, touchStartTile.col, targetTile.row, targetTile.col);
+                    }
+                } else if (touchStartTile.row === endTile.row && touchStartTile.col === endTile.col) {
+                    // Tap
+                    handleTileClick(touchStartTile.row, touchStartTile.col);
+                }
+            }
+            
+            touchStartPos = null;
+            touchStartTile = null;
+        }
+        
+        function handleMouseDown(e) {
+            if (game.isAnimating) return;
+            
+            const rect = game.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const tile = getTileAt(x, y);
+            if (tile) {
+                handleTileClick(tile.row, tile.col);
+            }
+        }
+        
+        function handleMouseMove(e) {
+            if (game.activePower === 'tuna' || game.activePower === 'box') {
+                const rect = game.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const tile = getTileAt(x, y);
+                if (tile) {
+                    game.powerTargetPreview = tile;
+                    render();
+                }
+            }
+        }
+        
+        function handleMouseUp(e) {}
+        
+        function getTileAt(x, y) {
+            const col = Math.floor(x / game.tileSize);
+            const row = Math.floor(y / game.tileSize);
+            
+            if (row >= 0 && row < game.gridSize && col >= 0 && col < game.gridSize) {
+                return { row, col };
+            }
+            return null;
+        }
+        
+        function getSwipeDirection(dx, dy) {
+            const absDx = Math.abs(dx);
+            const absDy = Math.abs(dy);
+            
+            if (absDx > absDy) {
+                return dx > 0 ? 'right' : 'left';
+            } else {
+                return dy > 0 ? 'down' : 'up';
+            }
+        }
+        
+        function getAdjacentTile(row, col, direction) {
+            const directions = {
+                'up': { row: row - 1, col: col },
+                'down': { row: row + 1, col: col },
+                'left': { row: row, col: col - 1 },
+                'right': { row: row, col: col + 1 }
+            };
+            
+            const target = directions[direction];
+            if (target.row >= 0 && target.row < game.gridSize && 
+                target.col >= 0 && target.col < game.gridSize) {
+                return target;
+            }
+            return null;
+        }
+        
+        function handleTileClick(row, col) {
+            if (game.activePower) {
+                usePower(row, col);
+                return;
+            }
+            if (!game.selectedCat) {
+                game.selectedCat = { row, col };
+                render();
+            } else {
+                const isAdjacent = (
+                    (Math.abs(game.selectedCat.row - row) === 1 && game.selectedCat.col === col) ||
+                    (Math.abs(game.selectedCat.col - col) === 1 && game.selectedCat.row === row)
+                );
+                
+                if (isAdjacent) {
+                    selectAndSwap(game.selectedCat.row, game.selectedCat.col, row, col);
+                } else {
+                    game.selectedCat = { row, col };
+                    render();
+                }
+            }
+        }
+        
+        async function selectAndSwap(row1, col1, row2, col2) {
+            game.isAnimating = true;
+            game.selectedCat = null;
+            
+            await animateSwap(row1, col1, row2, col2);
+            swapTiles(row1, col1, row2, col2);
+            
+            let matches = findMatches();
+            
+            if (matches.length > 0) {
+                game.moves--;
+                game.comboMultiplier = 1;
+                
+                let isFirstMatch = true;
+                while (matches.length > 0) {
+                    let groups = findMatchGroups();
+                    await processMatches(matches, groups, !isFirstMatch);
+                    await applyGravity();
+                    await fillEmptySpaces();
+                    matches = findMatches();
+                    game.comboMultiplier++;
+                    isFirstMatch = false;
+                }
+                
+                updateUI();
+                checkGameState();
+            } else {
+                await animateSwap(row1, col1, row2, col2);
+                swapTiles(row1, col1, row2, col2);
+            }
+            
+            game.isAnimating = false;
+            render();
+        }
+        
+        // ---- POWER-UP LOGIC ----
+        
+        function updatePowerUI() {
+            const boxBtn = document.getElementById('boxPowerBtn');
+            const tunaBtn = document.getElementById('tunaPowerBtn');
+            const slotBtn = document.getElementById('slotPowerBtn');
+            const unlocked = game.levelConfigs[game.currentLevel - 1].hasSpecials;
+            
+            document.getElementById('boxCount').textContent = game.powers.box;
+            document.getElementById('tunaCount').textContent = game.powers.tuna;
+            document.getElementById('slotCount').textContent = game.powers.slot;
+            
+            boxBtn.disabled = !unlocked || game.powers.box <= 0 || game.activePower !== null;
+            tunaBtn.disabled = !unlocked || game.powers.tuna <= 0 || game.activePower !== null;
+            slotBtn.disabled = !unlocked || game.powers.slot <= 0 || game.activePower !== null;
+            
+            boxBtn.classList.toggle('active', game.activePower === 'box');
+            tunaBtn.classList.toggle('active', game.activePower === 'tuna');
+            slotBtn.classList.toggle('active', game.activePower === 'slot');
+        }
+        
+        // ---- SAVE-CODE SYSTEM ----
+        // 8-digit code: 2 digits = level, 6 digits = total points
+        // The total points figure only updates when a level is completed.
+        function makeLevelCode() {
+            const lvl = String(game.currentLevel).padStart(2, '0');
+            const total = String(Math.min(Math.max(game.totalScore, 0), 999999)).padStart(6, '0');
+            return lvl + total;
+        }
+        
+        function decodeLevelCode(raw) {
+            const code = String(raw || '').replace(/[\s-]/g, '');
+            if (!/^\d{8}$/.test(code)) return null;
+            const level = parseInt(code.slice(0, 2), 10);
+            if (level < 1 || level > 29) return null;
+            return { level: level, total: parseInt(code.slice(2), 10) };
+        }
+        
+        function updateLevelCode() {
+            const el = document.getElementById('levelCode');
+            const code = makeLevelCode();
+            el.innerHTML = `Save spot \u{26A1} <span class="code-val">${code.slice(0,2)}-${code.slice(2)}</span> write it down to return later`;
+        }
+        
+        function saveProgress() {
+            try {
+                localStorage.setItem('meowMatchSave', JSON.stringify({
+                    level: game.currentLevel,
+                    total: game.totalScore,
+                    box: game.powers.box,
+                    tuna: game.powers.tuna,
+                    slot: game.powers.slot
+                }));
+            } catch (e) {}
+        }
+        
+        function loadProgress() {
+            try {
+                const raw = localStorage.getItem('meowMatchSave');
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) { return null; }
+        }
+        
+        function activatePower(type) {
+            if (game.isAnimating) return;
+            if (game.activePower === type) {
+                game.activePower = null;  // toggle off
+            } else if (game.powers[type] > 0) {
+                game.activePower = type;
+            }
+            game.powerTargetPreview = null;
+            updatePowerUI();
+            render();
+        }
+        
+        async function usePower(row, col) {
+            const type = game.activePower;
+            if (!type) return;
+            
+            const targetType = game.grid[row][col].type;
+            if (targetType === -1) {
+                game.activePower = null;
+                updatePowerUI();
+                render();
+                return;
+            }
+            
+            game.isAnimating = true;
+            game.activePower = null;
+            game.powerTargetPreview = null;
+            updatePowerUI();
+            
+            if (type === 'box') {
+                game.powers.box--;
+                await applyBoxPower(row, col, targetType);
+            } else if (type === 'tuna') {
+                game.powers.tuna--;
+                await applyTunaPower(row, col);
+            } else if (type === 'slot') {
+                game.powers.slot--;
+                await applySlotPower();
+            }
+            updatePowerUI();
+            
+            game.isAnimating = false;
+            render();
+        }
+        
+        // Box power: all cats of targetType within 3 tiles jump into the box
+        async function applyBoxPower(row, col, targetType) {
+            const affected = [];
+            for (let r = 0; r < game.gridSize; r++) {
+                for (let c = 0; c < game.gridSize; c++) {
+                    if (game.grid[r][c].type === targetType &&
+                        game.grid[r][c].type !== -1 &&
+                        Math.abs(r - row) + Math.abs(c - col) <= 3) {
+                        affected.push({ row: r, col: c });
+                    }
+                }
+            }
+            
+            const points = affected.length * 20;
+            game.score += points;
+            
+            affected.forEach(m => {
+                createParticles(
+                    m.col * game.tileSize + game.tileSize / 2,
+                    m.row * game.tileSize + game.tileSize / 2,
+                    CAT_TYPES[game.grid[m.row][m.col].type],
+                    game.grid[m.row][m.col].type
+                );
+                game.grid[m.row][m.col].matched = true;
+            });
+            
+            await animateRemoval(affected);
+            
+            affected.forEach(m => {
+                game.grid[m.row][m.col].type = -1;
+                game.grid[m.row][m.col].matched = false;
+                game.grid[m.row][m.col].scale = 1;
+                game.grid[m.row][m.col].alpha = 1;
+            });
+            
+            updateUI();
+            await resolveCascade();
+        }
+        
+        // Tuna power: remove all cats within Manhattan distance 2 of (row,col)
+        async function applyTunaPower(row, col) {
+            const affected = [];
+            for (let r = 0; r < game.gridSize; r++) {
+                for (let c = 0; c < game.gridSize; c++) {
+                    if (Math.abs(r - row) + Math.abs(c - col) <= 2 && game.grid[r][c].type !== -1) {
+                        affected.push({ row: r, col: c });
+                    }
+                }
+            }
+            
+            const points = affected.length * 20;
+            game.score += points;
+            
+            affected.forEach(m => {
+                createParticles(
+                    m.col * game.tileSize + game.tileSize / 2,
+                    m.row * game.tileSize + game.tileSize / 2,
+                    CAT_TYPES[game.grid[m.row][m.col].type],
+                    game.grid[m.row][m.col].type
+                );
+                game.grid[m.row][m.col].matched = true;
+            });
+            
+            await animateRemoval(affected);
+            
+            affected.forEach(m => {
+                game.grid[m.row][m.col].type = -1;
+                game.grid[m.row][m.col].matched = false;
+                game.grid[m.row][m.col].scale = 1;
+                game.grid[m.row][m.col].alpha = 1;
+            });
+            
+            updateUI();
+            await resolveCascade();
+        }
+        
+        // Slot machine power: remove all cats on the board, then randomly refill it
+        async function applySlotPower() {
+            const all = [];
+            for (let r = 0; r < game.gridSize; r++) {
+                for (let c = 0; c < game.gridSize; c++) {
+                    if (game.grid[r][c].type !== -1) all.push({ row: r, col: c });
+                }
+            }
+            
+            const points = all.length * 20;
+            game.score += points;
+            
+            all.forEach(m => {
+                createParticles(
+                    m.col * game.tileSize + game.tileSize / 2,
+                    m.row * game.tileSize + game.tileSize / 2,
+                    CAT_TYPES[game.grid[m.row][m.col].type],
+                    game.grid[m.row][m.col].type
+                );
+                game.grid[m.row][m.col].matched = true;
+            });
+            
+            await animateRemoval(all);
+            
+            const config = game.levelConfigs[game.currentLevel - 1];
+            generateGrid(config.numCatTypes);
+            removeInitialMatches(config.numCatTypes);
+            
+            updateUI();
+            checkGameState();
+        }
+        
+        // Shared cascade resolution for power effects (no move cost, no power awards)
+        async function resolveCascade() {
+            // Always settle the board first (gravity + refill any removed cells)
+            if (findEmptyCells() > 0) {
+                await applyGravity();
+                await fillEmptySpaces();
+            }
+            
+            let matches = findMatches();
+            let combo = 1;
+            while (matches.length > 0) {
+                game.comboMultiplier = combo;
+                await processMatches(matches, null, true);
+                await applyGravity();
+                await fillEmptySpaces();
+                matches = findMatches();
+                combo++;
+            }
+            updateUI();
+            checkGameState();
+        }
+        
+        function findEmptyCells() {
+            let count = 0;
+            for (let r = 0; r < game.gridSize; r++)
+                for (let c = 0; c < game.gridSize; c++)
+                    if (game.grid[r][c].type === -1) count++;
+            return count;
+        }
+        
+        function swapTiles(row1, col1, row2, col2) {
+            const temp = game.grid[row1][col1];
+            game.grid[row1][col1] = game.grid[row2][col2];
+            game.grid[row2][col2] = temp;
+            
+            game.grid[row1][col1].x = col1 * game.tileSize;
+            game.grid[row1][col1].y = row1 * game.tileSize;
+            game.grid[row2][col2].x = col2 * game.tileSize;
+            game.grid[row2][col2].y = row2 * game.tileSize;
+        }
+        
+        function findMatchGroups() {
+            const groups = [];
+            const visited = new Set();
+            
+            for (let row = 0; row < game.gridSize; row++) {
+                let col = 0;
+                while (col < game.gridSize) {
+                    const type = game.grid[row][col].type;
+                    if (type === -1) { col++; continue; }
+                    let len = 1;
+                    while (col + len < game.gridSize && game.grid[row][col + len].type === type) len++;
+                    if (len >= 3) {
+                        const cells = [];
+                        for (let i = 0; i < len; i++) cells.push({ row, col: col + i });
+                        groups.push({ cells, type, length: len });
+                    }
+                    col += len || 1;
+                }
+            }
+            
+            for (let col = 0; col < game.gridSize; col++) {
+                let row = 0;
+                while (row < game.gridSize) {
+                    const type = game.grid[row][col].type;
+                    if (type === -1) { row++; continue; }
+                    let len = 1;
+                    while (row + len < game.gridSize && game.grid[row + len][col].type === type) len++;
+                    if (len >= 3) {
+                        const cells = [];
+                        for (let i = 0; i < len; i++) cells.push({ row: row + i, col });
+                        groups.push({ cells, type, length: len });
+                    }
+                    row += len || 1;
+                }
+            }
+            
+            return groups;
+        }
+        
+        function findMatches() {
+            const matches = [];
+            const matched = new Set();
+            
+            for (let row = 0; row < game.gridSize; row++) {
+                for (let col = 0; col < game.gridSize - 2; col++) {
+                    const type = game.grid[row][col].type;
+                    if (type === -1) continue;
+                    let matchLength = 1;
+                    while (col + matchLength < game.gridSize && 
+                           game.grid[row][col + matchLength].type === type) matchLength++;
+                    if (matchLength >= 3) {
+                        for (let i = 0; i < matchLength; i++) {
+                            const key = `${row},${col + i}`;
+                            if (!matched.has(key)) {
+                                matches.push({ row, col: col + i, type });
+                                matched.add(key);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            for (let col = 0; col < game.gridSize; col++) {
+                for (let row = 0; row < game.gridSize - 2; row++) {
+                    const type = game.grid[row][col].type;
+                    if (type === -1) continue;
+                    let matchLength = 1;
+                    while (row + matchLength < game.gridSize && 
+                           game.grid[row + matchLength][col].type === type) matchLength++;
+                    if (matchLength >= 3) {
+                        for (let i = 0; i < matchLength; i++) {
+                            const key = `${row + i},${col}`;
+                            if (!matched.has(key)) {
+                                matches.push({ row: row + i, col, type });
+                                matched.add(key);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return matches;
+        }
+        
+        async function processMatches(matches, groups, awardsDisabled) {
+            const pointsPerCat = 10;
+            const totalPoints = matches.length * pointsPerCat * game.comboMultiplier;
+            game.score += totalPoints;
+            
+            // Award power-ups from match groups (only if not a cascade, and hasSpecials)
+            if (!awardsDisabled && groups && game.levelConfigs[game.currentLevel - 1].hasSpecials) {
+                groups.forEach(g => {
+                    if (g.length >= 6) game.powers.slot++;
+                    else if (g.length >= 5) game.powers.tuna++;
+                    else if (g.length >= 4) game.powers.box++;
+                });
+                updatePowerUI();
+            }
+            
+            // Create particles for each matched cat
+            matches.forEach(match => {
+                createParticles(
+                    match.col * game.tileSize + game.tileSize / 2,
+                    match.row * game.tileSize + game.tileSize / 2,
+                    CAT_TYPES[game.grid[match.row][match.col].type],
+                    game.grid[match.row][match.col].type
+                );
+            });
+            
+            // Animate removal
+            for (let i = 0; i < matches.length; i++) {
+                const match = matches[i];
+                game.grid[match.row][match.col].matched = true;
+            }
+            
+            await animateRemoval(matches);
+            
+            matches.forEach(match => {
+                game.grid[match.row][match.col].type = -1;
+                game.grid[match.row][match.col].matched = false;
+            });
+            
+            updateUI();
+        }
+        
+        async function applyGravity() {
+            // Track tiles that need to fall, with their source row
+            const falling = [];
+
+            for (let col = 0; col < game.gridSize; col++) {
+                let writeRow = game.gridSize - 1;
+                for (let row = game.gridSize - 1; row >= 0; row--) {
+                    const tile = game.grid[row][col];
+                    if (tile.type !== -1) {
+                        if (writeRow !== row) {
+                            // Move the tile's data down to writeRow
+                            falling.push({ fromRow: row, fromCol: col, toRow: writeRow, toCol: col });
+                            game.grid[writeRow][col].type = tile.type;
+                            game.grid[writeRow][col].scale = 1;
+                            game.grid[writeRow][col].alpha = 1;
+                            tile.type = -1;
+                        }
+                        writeRow--;
+                    }
+                }
+            }
+
+            if (falling.length > 0) {
+                // Position all moved tiles just above their target for animation
+                falling.forEach(f => {
+                    const tile = game.grid[f.toRow][f.toCol];
+                    tile.y = f.fromRow * game.tileSize;
+                });
+                await animateGravity();
+            }
+        }
+        
+        async function fillEmptySpaces() {
+            const config = game.levelConfigs[game.currentLevel - 1];
+            let hasEmpty = false;
+            
+            for (let row = 0; row < game.gridSize; row++) {
+                for (let col = 0; col < game.gridSize; col++) {
+                    if (game.grid[row][col].type === -1) {
+                        game.grid[row][col].type = Math.floor(Math.random() * config.numCatTypes);
+                        game.grid[row][col].y = -game.tileSize;
+                        game.grid[row][col].scale = 1;
+                        game.grid[row][col].alpha = 1;
+                        hasEmpty = true;
+                    }
+                }
+            }
+            
+            if (hasEmpty) {
+                await animateDropIn();
+            }
+        }
+        
+        function createParticles(x, y, emoji, artIndex) {
+            for (let i = 0; i < 6; i++) {
+                game.particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10 - 4,
+                    life: 1,
+                    emoji: emoji,
+                    artIndex: artIndex,
+                    size: Math.random() * 8 + 12
+                });
+            }
+            startParticleTick();
+        }
+
+        // Continuous loop that animates particles until they all expire
+        function startParticleTick() {
+            if (game.particleTickRunning) return;
+            game.particleTickRunning = true;
+
+            function tick() {
+                if (game.particles.length === 0) {
+                    game.particleTickRunning = false;
+                    return;
+                }
+                updateParticles();
+                render();
+                requestAnimationFrame(tick);
+            }
+
+            requestAnimationFrame(tick);
+        }
+        
+        async function animateSwap(row1, col1, row2, col2) {
+            return new Promise(resolve => {
+                const tile1 = game.grid[row1][col1];
+                const tile2 = game.grid[row2][col2];
+                const duration = 150;
+                const startTime = Date.now();
+                
+                const startX1 = tile1.x, startY1 = tile1.y;
+                const startX2 = tile2.x, startY2 = tile2.y;
+                const endX1 = col2 * game.tileSize, endY1 = row2 * game.tileSize;
+                const endX2 = col1 * game.tileSize, endY2 = row1 * game.tileSize;
+                
+                function animate() {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const eased = easeOutCubic(progress);
+                    
+                    tile1.x = startX1 + (endX1 - startX1) * eased;
+                    tile1.y = startY1 + (endY1 - startY1) * eased;
+                    tile2.x = startX2 + (endX2 - startX2) * eased;
+                    tile2.y = startY2 + (endY2 - startY2) * eased;
+                    
+                    render();
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        resolve();
+                    }
+                }
+                
+                animate();
+            });
+        }
+        
+        async function animateRemoval(matches) {
+            return new Promise(resolve => {
+                const duration = 200;
+                const startTime = Date.now();
+                
+                function animate() {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    
+                    matches.forEach(match => {
+                        game.grid[match.row][match.col].scale = 1 - progress;
+                        game.grid[match.row][match.col].alpha = 1 - progress;
+                    });
+                    
+                    render();
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        resolve();
+                    }
+                }
+                
+                animate();
+            });
+        }
+        
+        async function animateGravity() {
+            return new Promise(resolve => {
+                const duration = 250;
+                const startTime = Date.now();
+                const startPositions = [];
+
+                // Only animate tiles that are not at their final position
+                for (let row = 0; row < game.gridSize; row++) {
+                    for (let col = 0; col < game.gridSize; col++) {
+                        const tile = game.grid[row][col];
+                        if (tile.type !== -1 && tile.y !== row * game.tileSize) {
+                            startPositions.push({
+                                row, col,
+                                startY: tile.y
+                            });
+                        }
+                    }
+                }
+
+                if (startPositions.length === 0) {
+                    resolve();
+                    return;
+                }
+
+                function animate() {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const eased = easeOutBounce(progress);
+
+                    startPositions.forEach(pos => {
+                        const targetY = pos.row * game.tileSize;
+                        const startY = pos.startY;
+                        game.grid[pos.row][pos.col].y = startY + (targetY - startY) * eased;
+                    });
+
+                    render();
+
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        // Ensure exact final positions
+                        startPositions.forEach(pos => {
+                            game.grid[pos.row][pos.col].y = pos.row * game.tileSize;
+                        });
+                        resolve();
+                    }
+                }
+
+                animate();
+            });
+        }
+        
+        async function animateDropIn() {
+            return new Promise(resolve => {
+                const duration = 250;
+                const startTime = Date.now();
+                const startPositions = [];
+                
+                for (let row = 0; row < game.gridSize; row++) {
+                    for (let col = 0; col < game.gridSize; col++) {
+                        if (game.grid[row][col].y < 0) {
+                            startPositions.push({
+                                row, col,
+                                startY: game.grid[row][col].y
+                            });
+                        }
+                    }
+                }
+                
+                function animate() {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const eased = easeOutBounce(progress);
+                    
+                    startPositions.forEach(pos => {
+                        const targetY = pos.row * game.tileSize;
+                        game.grid[pos.row][pos.col].y = pos.startY + (targetY - pos.startY) * eased;
+                    });
+                    
+                    render();
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        // Ensure exact final positions
+                        startPositions.forEach(pos => {
+                            game.grid[pos.row][pos.col].y = pos.row * game.tileSize;
+                        });
+                        resolve();
+                    }
+                }
+                
+                animate();
+            });
+        }
+        
+        function updateParticles() {
+            game.particles = game.particles.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.3;
+                p.life -= 0.03;
+                return p.life > 0;
+            });
+        }
+        
+        function easeOutCubic(t) {
+            return 1 - Math.pow(1 - t, 3);
+        }
+        
+        function easeOutBounce(t) {
+            const n1 = 7.5625;
+            const d1 = 2.75;
+            
+            if (t < 1 / d1) {
+                return n1 * t * t;
+            } else if (t < 2 / d1) {
+                return n1 * (t -= 1.5 / d1) * t + 0.75;
+            } else if (t < 2.5 / d1) {
+                return n1 * (t -= 2.25 / d1) * t + 0.9375;
+            } else {
+                return n1 * (t -= 2.625 / d1) * t + 0.984375;
+            }
+        }
+        
+        function checkGameState() {
+            if (game.score >= game.goalScore) {
+                setTimeout(() => showLevelComplete(), 300);
+            } else if (game.moves <= 0) {
+                setTimeout(() => showGameOver(), 300);
+            }
+        }
+        
+        function showLevelComplete() {
+            const overlay = document.getElementById('levelCompleteOverlay');
+            const title = document.getElementById('levelCompleteTitle');
+            const message = document.getElementById('levelCompleteMessage');
+            const emoji = document.getElementById('completeEmoji');
+            const score = document.getElementById('finalScore');
+            const nextBtn = document.getElementById('nextLevelBtn');
+            
+            // Add this level's points to the running total (exactly once)
+            if (!game.levelCleared) {
+                game.totalScore += game.score;
+                game.levelCleared = true;
+                saveProgress();
+            }
+            
+            const total = document.getElementById('finalTotal');
+            if (total) total.textContent = game.totalScore.toLocaleString();
+            
+            if (game.currentLevel === 29) {
+                title.textContent = '\u{1F389} BOSS DEFEATED!\u{1F389}';
+                message.textContent = 'You conquered the Final Boss and all 29 levels! Happy 29th Birthday!';
+                emoji.textContent = '\u{1F63B} \u{1F63A} \u{1F638}';
+                nextBtn.textContent = '\u{1F451} Level 29 Replay';
+            } else if (game.currentLevel === 28) {
+                title.textContent = '\u{1F63C} Bring On the Boss!';
+                message.textContent = `Amazing run through Level 28! The Final Boss awaits...`;
+                emoji.textContent = '\u{1F479} \u{1F63A} \u{1F638}';
+                nextBtn.textContent = '\u{1F479} Fight the Boss!';
+            } else {
+                title.textContent = 'Level Complete!';
+                message.textContent = `Great job completing Level ${game.currentLevel}!`;
+                emoji.textContent = '\u{1F63A} \u{1F63B} \u{1F638}';
+                nextBtn.textContent = 'Next Level';
+            }
+            
+            // On the boss level, "replay" restarts level 29 instead of advancing
+            if (game.currentLevel === 29) {
+                nextBtn.onclick = () => {
+                    document.getElementById('levelCompleteOverlay').classList.add('hidden');
+                    loadLevel(29);
+                };
+            } else {
+                nextBtn.onclick = () => {
+                    document.getElementById('levelCompleteOverlay').classList.add('hidden');
+                    game.currentLevel = Math.min(game.currentLevel + 1, 29);
+                    loadLevel(game.currentLevel);
+                };
+            }
+            
+            score.textContent = game.score;
+            overlay.classList.remove('hidden');
+        }
+        
+        function showGameOver() {
+            document.getElementById('gameOverOverlay').classList.remove('hidden');
+        }
+        
+        function updateUI() {
+            document.getElementById('scoreDisplay').textContent = game.score;
+            document.getElementById('movesDisplay').textContent = game.moves;
+            document.getElementById('goalDisplay').textContent = game.goalScore;
+            
+            const progress = Math.min((game.score / game.goalScore) * 100, 100);
+            const progressText = document.getElementById('progressText');
+            const progressFill = document.getElementById('progressFill');
+            
+            if (game.currentLevel === 29) {
+                progressText.textContent = `Boss HP: ${Math.max(100 - Math.floor(progress), 0)}% remaining`;
+                progressFill.classList.add('boss-mode');
+            } else {
+                progressText.textContent = `${Math.floor(progress)}% to next level`;
+                progressFill.classList.remove('boss-mode');
+            }
+            
+            updatePowerUI();
+            progressFill.style.width = `${progress}%`;
+        }
+        
+        function render() {
+            const ctx = game.ctx;
+            const canvas = game.canvas;
+            
+            // Scale context for retina displays (all coords stay in CSS pixels)
+            ctx.setTransform((game.dpr || 1), 0, 0, (game.dpr || 1), 0, 0);
+            ctx.clearRect(0, 0, canvas.width / (game.dpr || 1), canvas.height / (game.dpr || 1));
+            
+            // Draw grid background
+            const cssWidth = canvas.width / (game.dpr || 1);
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(0, 0, cssWidth, cssWidth);
+            
+            // Draw tiles
+            for (let row = 0; row < game.gridSize; row++) {
+                for (let col = 0; col < game.gridSize; col++) {
+                    const tile = game.grid[row][col];
+                    
+                    if (tile.type === -1) continue;
+                    
+                    // Draw tile background
+                    const isEven = (row + col) % 2 === 0;
+                    ctx.fillStyle = isEven ? '#ffffff' : '#f8f8f8';
+                    ctx.fillRect(
+                        col * game.tileSize + 2,
+                        row * game.tileSize + 2,
+                        game.tileSize - 4,
+                        game.tileSize - 4
+                    );
+                    
+                    // Draw selection highlight
+                    if (game.selectedCat && 
+                        game.selectedCat.row === row && 
+                        game.selectedCat.col === col) {
+                        ctx.strokeStyle = '#764ba2';
+                        ctx.lineWidth = 4;
+                        ctx.strokeRect(
+                            col * game.tileSize + 2,
+                            row * game.tileSize + 2,
+                            game.tileSize - 4,
+                            game.tileSize - 4
+                        );
+                    }
+                    
+                    // Draw cat (custom art if loaded, emoji otherwise)
+                    drawTileArt(
+                        tile.type,
+                        tile.x + game.tileSize / 2,
+                        tile.y + game.tileSize / 2,
+                        game.tileSize * 0.6 * tile.scale,
+                        tile.alpha
+                    );
+                }
+            }
+            
+            // Draw particles
+            game.particles.forEach(p => {
+                drawTileArt(p.artIndex, p.x, p.y, p.size, p.life);
+            });
+            
+            // Power active overlays
+            if (game.activePower) {
+                const overlayColor = game.activePower === 'box' ? 'rgba(212,175,55,0.9)'
+                    : game.activePower === 'tuna' ? 'rgba(220,60,60,0.9)'
+                    : 'rgba(118,75,162,0.9)';
+                for (let row = 0; row < game.gridSize; row++) {
+                    for (let col = 0; col < game.gridSize; col++) {
+                        if (game.grid[row][col].type === -1) continue;
+                        ctx.strokeStyle = overlayColor;
+                        ctx.lineWidth = 3;
+                        ctx.setLineDash([6, 4]);
+                        ctx.strokeRect(
+                            col * game.tileSize + 2,
+                            row * game.tileSize + 2,
+                            game.tileSize - 4,
+                            game.tileSize - 4
+                        );
+                        ctx.setLineDash([]);
+                    }
+                }
+            }
+            
+            // Power destruction preview during touch drag
+            if (game.powerTargetPreview) {
+                const p = game.powerTargetPreview;
+                const isBox = game.activePower === 'box';
+                const radius = isBox ? 3 : 2;
+                const color = isBox ? '#d4af37' : '#dc3c3c';
+                
+                // Dimly tint the entire affected radius
+                ctx.globalAlpha = 0.2;
+                ctx.fillStyle = color;
+                for (let r = 0; r < game.gridSize; r++) {
+                    for (let c = 0; c < game.gridSize; c++) {
+                        if (Math.abs(r - p.row) + Math.abs(c - p.col) <= radius) {
+                            ctx.fillRect(
+                                c * game.tileSize + 2,
+                                r * game.tileSize + 2,
+                                game.tileSize - 4,
+                                game.tileSize - 4
+                            );
+                        }
+                    }
+                }
+                
+                // For box: highlight the exact cats that will be collected (stronger glow)
+                if (isBox) {
+                    const targetType = game.grid[p.row] && game.grid[p.row][p.col] &&
+                        game.grid[p.row][p.col].type;
+                    if (targetType !== undefined && targetType !== -1) {
+                        ctx.globalAlpha = 0.5;
+                        for (let r = 0; r < game.gridSize; r++) {
+                            for (let c = 0; c < game.gridSize; c++) {
+                                if (game.grid[r][c].type === targetType &&
+                                    Math.abs(r - p.row) + Math.abs(c - p.col) <= radius) {
+                                    ctx.fillRect(
+                                        c * game.tileSize + 2,
+                                        r * game.tileSize + 2,
+                                        game.tileSize - 4,
+                                        game.tileSize - 4
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                ctx.globalAlpha = 1;
+            }
+        }
+        
+        // Start the game when page loads
+        window.onload = initGame;
+    </script>
+</body>
+</html>
