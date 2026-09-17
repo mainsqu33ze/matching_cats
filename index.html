@@ -474,6 +474,36 @@
             g.restore();
         }
         
+        // Custom power-effect art: drop PNGs in assets/fx/box.png etc. and they
+        // are drawn instead of the placeholder sprites below.
+        const FX_ART = {};
+        function loadFxArt() {
+            if (typeof Image === 'undefined') return;
+            const img = new Image();
+            img.onload = function () { FX_ART.box = this; };
+            img.onerror = function () { FX_ART.box = null; };
+            img.src = 'assets/fx/box.png';
+        }
+        function drawBoxSprite(x, y, size) {
+            const g = game.ctx;
+            if (FX_ART.box) {
+                g.drawImage(FX_ART.box, x, y, size, size);
+                return;
+            }
+            // Placeholder cardboard box (replace by dropping assets/fx/box.png)
+            const pad = size * 0.06;
+            g.fillStyle = '#c98a4b';
+            g.fillRect(x + pad, y + pad * 0.8, size - pad * 2, size - pad * 1.8);
+            g.strokeStyle = '#8b5a2b';
+            g.lineWidth = size * 0.05;
+            g.strokeRect(x + pad, y + pad * 0.8, size - pad * 2, size - pad * 1.8);
+            g.fillStyle = '#d9a066';
+            g.fillRect(x + size * 0.2, y - size * 0.06, size * 0.16, size * 0.2);
+            g.fillRect(x + size * 0.64, y - size * 0.06, size * 0.16, size * 0.2);
+            g.fillStyle = '#b07a3c';
+            g.fillRect(x + size * 0.4, y + pad + size * 0.08, size * 0.2, size * 0.45);
+        }
+        
         // Game state
         const game = {
             canvas: null,
@@ -492,6 +522,7 @@
             comboMultiplier: 1,
             particles: [],
             particleTickRunning: false,
+            effects: [],
             levelConfigs: [],
             powers: { box: 0, tuna: 0, slot: 0 },
             activePower: null,
@@ -580,6 +611,7 @@
             game.levelConfigs = generateLevelConfigs();
             
             loadCatArt();
+            loadFxArt();
             resetPowers();
             setupCanvas();
             // Don't overwrite a stored save with the initial level-1 load behind the welcome screen
@@ -621,6 +653,7 @@
             game.levelCleared = false;
             game.activePower = null;
             game.powerTargetPreview = null;
+            game.effects = [];
             
             setupCanvas();
             generateGrid(config.numCatTypes);
@@ -1139,24 +1172,14 @@
                 }
             }
             
+            // Celebration: the box drops in and every affected cat leaps into it
+            await animateBoxCollect(row, col, affected);
+            
             const points = affected.length * 20;
             game.score += points;
             
             affected.forEach(m => {
-                createParticles(
-                    m.col * game.tileSize + game.tileSize / 2,
-                    m.row * game.tileSize + game.tileSize / 2,
-                    CAT_TYPES[game.grid[m.row][m.col].type],
-                    game.grid[m.row][m.col].type
-                );
-                game.grid[m.row][m.col].matched = true;
-            });
-            
-            await animateRemoval(affected);
-            
-            affected.forEach(m => {
                 game.grid[m.row][m.col].type = -1;
-                game.grid[m.row][m.col].matched = false;
                 game.grid[m.row][m.col].scale = 1;
                 game.grid[m.row][m.col].alpha = 1;
             });
@@ -1549,6 +1572,96 @@
             });
         }
         
+        // Generic tween: calls updateFn(progress 0..1) each frame until done
+        function tween(duration, updateFn) {
+            return new Promise(resolve => {
+                const startTime = Date.now();
+                function animate() {
+                    const elapsed = Date.now() - startTime;
+                    const p = Math.min(elapsed / duration, 1);
+                    updateFn(p);
+                    render();
+                    if (p < 1) requestAnimationFrame(animate);
+                    else resolve();
+                }
+                animate();
+            });
+        }
+        
+        function wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        
+        // Box power animation: the box drops onto the tapped tile, then every
+        // affected cat leaps into it. Flights start on a short stagger so they
+        // overlap, and each original cat vanishes the moment its flight begins
+        // (the cat on the tapped tile goes first).
+        async function animateBoxCollect(row, col, affected) {
+            const cx = col * game.tileSize + game.tileSize / 2;
+            const cy = row * game.tileSize + game.tileSize / 2;
+            
+            const box = { kind: 'box', cx: cx, cy: cy, scale: 0, rotation: 0, alpha: 1 };
+            game.effects.push(box);
+            
+            // Box drops in with a bounce
+            await tween(260, p => {
+                box.scale = easeOutBounce(p);
+            });
+            
+            // Tapped cat first, then everyone else
+            const ordered = [];
+            const tapped = affected.find(m => m.row === row && m.col === col);
+            if (tapped) ordered.push(tapped);
+            affected.forEach(m => {
+                if (!(m.row === row && m.col === col)) ordered.push(m);
+            });
+            
+            const stagger = 50;
+            const flights = ordered.map((m, i) =>
+                (async () => {
+                    await wait(i * stagger);
+                    
+                    const tile = game.grid[m.row][m.col];
+                    if (tile.type === -1) return;
+                    
+                    const artIndex = tile.type;
+                    const scx = m.col * game.tileSize + game.tileSize / 2;
+                    const scy = m.row * game.tileSize + game.tileSize / 2;
+                    const flier = {
+                        kind: 'cat', artIndex: artIndex,
+                        x: scx, y: scy, scale: 1, alpha: 1
+                    };
+                    game.effects.push(flier);
+                    
+                    // The original cat disappears as its copy leaps
+                    tile.type = -1;
+                    
+                    await tween(180, p => {
+                        const t = easeOutCubic(p);
+                        const rise = Math.sin(p * Math.PI) * (game.tileSize * 0.6 + Math.abs(scx - cx) * 0.35);
+                        flier.x = scx + (cx - scx) * t;
+                        flier.y = scy + (cy - scy) * t - rise;
+                        flier.scale = 1 - t * 0.7;
+                        flier.alpha = t > 0.8 ? 1 - (t - 0.8) / 0.2 : 1;
+                    });
+                    
+                    const idx = game.effects.indexOf(flier);
+                    if (idx !== -1) game.effects.splice(idx, 1);
+                })()
+            );
+            await Promise.all(flights);
+            
+            // Box wiggles and fades away
+            await tween(240, p => {
+                box.scale = 1 + Math.sin(p * Math.PI * 3) * (1 - p) * 0.08;
+                box.rotation = Math.sin(p * Math.PI * 3) * (1 - p) * 0.18;
+                box.alpha = p < 0.7 ? 1 : 1 - (p - 0.7) / 0.3;
+            });
+            
+            const bi = game.effects.indexOf(box);
+            if (bi !== -1) game.effects.splice(bi, 1);
+        }
+        
         async function animateGravity() {
             return new Promise(resolve => {
                 const duration = 250;
@@ -1818,6 +1931,21 @@
             // Draw particles
             game.particles.forEach(p => {
                 drawTileArt(p.artIndex, p.x, p.y, p.size, p.life);
+            });
+            
+            // Draw power-effect animations (box + flying cats)
+            game.effects.forEach(e => {
+                if (e.kind === 'box') {
+                    const size = game.tileSize * 1.3 * e.scale;
+                    ctx.save();
+                    ctx.translate(e.cx, e.cy);
+                    ctx.rotate(e.rotation || 0);
+                    ctx.globalAlpha = e.alpha;
+                    drawBoxSprite(-size / 2, -size / 2, size);
+                    ctx.restore();
+                } else if (e.kind === 'cat') {
+                    drawTileArt(e.artIndex, e.x, e.y, game.tileSize * 0.6 * e.scale, e.alpha);
+                }
             });
             
             // Power active overlays
