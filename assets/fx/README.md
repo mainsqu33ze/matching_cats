@@ -34,13 +34,17 @@ Until you add `tuna.png`, a placeholder can is drawn automatically.
 
 ## Slot power
 
-The slot machine doesn't have a sprite yet — it clears the whole board and
-reuses the cat art for its removal particles:
+The slot machine doesn't have a sprite yet — the whole board spins like slot
+reels (each cell fast-cycles cat icons with a vertical squash), then the
+columns lock in **left to right**, revealing the freshly generated grid.
 
 | Effect                       | Where it lives in `index.html`              |
 | ---------------------------- | ------------------------------------------- |
 | Slot machine (purple dashes) | Power overlay color in `render()`           |
-| Explosion particles          | `createParticles()` / particle draw          |
+| Reel animation               | `animateSlotSpin()` / `drawReelCell()`      |
+
+Earned by reaching an **8x combo** (not match length); a golden "SLOT MACHINE!"
+flash announces it (`showSlotFlash()`).
 
 To add a `slot.png`, mirror the box pattern: load it in `loadFxArt()`, add a
 draw helper, and call it from `applySlotPower()`.

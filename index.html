@@ -229,6 +229,36 @@
             100% { opacity: 0; transform: translate(-50%, -95%) scale(1); }
         }
         
+        .slot-flash {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.7em;
+            font-weight: bold;
+            color: #f1c40f;
+            text-shadow: 0 0 8px #fff, 0 0 18px #e67e22, 0 0 30px #e67e22, 2px 2px 0 #000;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 11;
+            text-align: center;
+            white-space: nowrap;
+        }
+        
+        .slot-flash.show {
+            animation: slotFlash 1.2s ease-out forwards;
+        }
+        
+        @keyframes slotFlash {
+            0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+            20%  { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
+            40%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            55%  { opacity: 0.15; }
+            70%  { opacity: 1; }
+            85%  { opacity: 0.15; }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1.05); }
+        }
+        
         .code-entry {
             margin-top: 15px;
         }
@@ -387,6 +417,7 @@
         
         <canvas id="gameCanvas"></canvas>
         <div class="combo-popup" id="comboPopup"></div>
+        <div class="slot-flash" id="slotFlash"></div>
         
         <div class="level-progress">
             <span id="progressText">0% to next level</span>
@@ -410,9 +441,9 @@
                     <li>Or swipe to swap cats</li>
                     <li>Match 3+ identical cats to score</li>
                     <li>Match 4 cats = &#128230; Box power!</li>
-                    <li>Match 5 cats = &#127843; Tuna power!</li>
-                    <li>Match 6+ cats = &#127920; Slot Machine power!</li>
+                    <li>Match 5+ cats = &#127843; Tuna power!</li>
                     <li>Fill a row AND a column = &#129668; Cat Wand! (swap any 2 cats free)</li>
+                    <li>Score an 8x combo = &#127920; Slot Machine power!</li>
                     <li>Cascades double your points every chain!</li>
                     <li>Follow-up cascade matches earn powers too!</li>
                     <li>Powers carry over between levels!</li>
@@ -590,7 +621,8 @@
             powers: { box: 0, tuna: 0, slot: 0, wand: 0 },
             activePower: null,
             powerTargetPreview: null,
-            wandSelection: null
+            wandSelection: null,
+            reel: null
         };
         
         // Generate 29 level configurations
@@ -718,6 +750,7 @@
             game.activePower = null;
             game.powerTargetPreview = null;
             game.wandSelection = null;
+            game.reel = null;
             game.effects = [];
             
             setupCanvas();
@@ -1317,7 +1350,8 @@
             await resolveCascade();
         }
         
-        // Slot machine power: remove all cats on the board, then randomly refill it
+        // Slot machine power: the whole board spins like slot reels (all columns
+// spinning, locking left to right), revealing a freshly generated grid.
         async function applySlotPower() {
             const all = [];
             for (let r = 0; r < game.gridSize; r++) {
@@ -1329,24 +1363,31 @@
             const points = all.length * 20;
             game.score += points;
             
-            all.forEach(m => {
-                createParticles(
-                    m.col * game.tileSize + game.tileSize / 2,
-                    m.row * game.tileSize + game.tileSize / 2,
-                    CAT_TYPES[game.grid[m.row][m.col].type],
-                    game.grid[m.row][m.col].type
-                );
-                game.grid[m.row][m.col].matched = true;
-            });
-            
-            await animateRemoval(all);
-            
+            // Generate the new board first; the reels reveal it as they stop
             const config = game.levelConfigs[game.currentLevel - 1];
             generateGrid(config.numCatTypes);
             removeInitialMatches(config.numCatTypes);
             
+            await animateSlotSpin(config.numCatTypes);
+            
             updateUI();
             checkGameState();
+        }
+        
+        // Slot reel animation: every column spins in place for a few seconds,
+        // then the columns lock in from left to right.
+        async function animateSlotSpin(numTypes) {
+            const colCount = game.gridSize;
+            const spinDuration = 2500;
+            const stagger = 200;
+            const landing = 240;
+            const total = spinDuration + (colCount - 1) * stagger;
+            
+            game.reel = { spinDuration: spinDuration, stagger: stagger, landing: landing, numTypes: numTypes, elapsed: 0 };
+            await tween(total, p => {
+                game.reel.elapsed = p * total;
+            });
+            game.reel = null;
         }
         
         // Cat Wand power: swap any two cats (any distance), free of move cost and
@@ -1526,11 +1567,15 @@
             // Award power-ups from match groups (cascades qualify too)
             if (!awardsDisabled && groups && game.levelConfigs[game.currentLevel - 1].hasSpecials) {
                 groups.forEach(g => {
-                    if (g.length >= 6) game.powers.slot++;
-                    else if (g.length >= 5) game.powers.tuna++;
+                    if (g.length >= 5) game.powers.tuna++;
                     else if (g.length >= 4) game.powers.box++;
                 });
                 if (hasDoubleMatch(groups)) game.powers.wand++;
+                // Reaching exactly an 8x combo grants the Slot Machine (only once per run)
+                if (game.comboMultiplier === 8) {
+                    game.powers.slot++;
+                    showSlotFlash();
+                }
                 updatePowerUI();
             }
             
@@ -1797,6 +1842,47 @@
             
             const bi = game.effects.indexOf(box);
             if (bi !== -1) game.effects.splice(bi, 1);
+        }
+        
+        // Draw a single slot-reel cell: spinning (cycling icons with a vertical
+        // squash) until its column stops, then a landing flip onto the final
+        // cat revealed from the newly generated grid.
+        function drawReelCell(row, col) {
+            const reel = game.reel;
+            const tile = game.grid[row][col];
+            const s = game.tileSize;
+            const cx = col * s + s / 2;
+            const cy = row * s + s / 2;
+            
+            const isEven = (row + col) % 2 === 0;
+            game.ctx.fillStyle = isEven ? '#ffffff' : '#f8f8f8';
+            game.ctx.fillRect(col * s + 2, row * s + 2, s - 4, s - 4);
+            
+            const stopAt = reel.spinDuration + col * reel.stagger;
+            let artIndex;
+            let scaleY = 1;
+            
+            if (reel.elapsed < stopAt - reel.landing) {
+                // Fast cycling reels (deterministic per cell so it reads as motion)
+                const t = reel.elapsed + (row * 7 + col * 13);
+                artIndex = Math.floor(t * 0.05) % reel.numTypes;
+                scaleY = 0.15 + Math.abs(Math.cos(t * 0.06)) * 0.85;
+            } else if (reel.elapsed < stopAt) {
+                // Landing flip onto the final cat
+                const k = (reel.elapsed - (stopAt - reel.landing)) / reel.landing;
+                artIndex = tile.type;
+                scaleY = 0.15 + Math.abs(Math.cos(k * Math.PI * 3)) * 0.85;
+            } else {
+                artIndex = tile.type;
+                scaleY = 1;
+            }
+            
+            game.ctx.save();
+            game.ctx.translate(cx, cy);
+            game.ctx.scale(1, Math.max(scaleY, 0.08));
+            game.ctx.translate(-cx, -cy);
+            drawTileArt(artIndex, cx, cy, s * 0.6, 1);
+            game.ctx.restore();
         }
         
         // Tuna power animation: the can pops into view, then every affected cat
@@ -2156,6 +2242,15 @@
             popup.classList.add('show');
         }
         
+        function showSlotFlash() {
+            const flash = document.getElementById('slotFlash');
+            if (!flash) return;
+            flash.textContent = '\u{1F3B0} SLOT MACHINE! \u{1F3B0}';
+            flash.classList.remove('show');
+            void flash.offsetWidth;
+            flash.classList.add('show');
+        }
+        
         function updateUI() {
             document.getElementById('scoreDisplay').textContent = game.score;
             document.getElementById('movesDisplay').textContent = game.moves;
@@ -2193,6 +2288,11 @@
             // Draw tiles
             for (let row = 0; row < game.gridSize; row++) {
                 for (let col = 0; col < game.gridSize; col++) {
+                    if (game.reel) {
+                        drawReelCell(row, col);
+                        continue;
+                    }
+                    
                     const tile = game.grid[row][col];
                     
                     if (tile.type === -1 || tile.hidden) continue;
