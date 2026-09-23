@@ -18,19 +18,32 @@ wiggles and fades away.
 
 Until you add `box.png`, a placeholder cardboard box is drawn automatically.
 
-## Tuna & slot powers
+## Tuna power
 
-These don't have sprites yet — they reuse the cat art for their particles:
+**File:** `tuna.png` — 256x256 PNG with a transparent background.
+
+When you use the tuna power, this sprite pops onto the tapped tile, then every
+affected cat swarms it all at once (concurrent flights, no stagger), vanishing
+as they arrive. The can wiggles and pops out afterward.
+
+- Loaded by `loadFxArt()` in `index.html`
+- Drawn by `drawTunaSprite()` in `index.html`
+- Animation: `animateTunaSwarm()` in `index.html`
+
+Until you add `tuna.png`, a placeholder can is drawn automatically.
+
+## Slot power
+
+The slot machine doesn't have a sprite yet — it clears the whole board and
+reuses the cat art for its removal particles:
 
 | Effect                       | Where it lives in `index.html`              |
 | ---------------------------- | ------------------------------------------- |
-| Tuna power (red dashes)      | Power overlay color + preview in `render()` |
-| Slot machine (purple dashes) | Power overlay color + preview in `render()` |
+| Slot machine (purple dashes) | Power overlay color in `render()`           |
 | Explosion particles          | `createParticles()` / particle draw          |
 
-To add a `tuna.png` / `slot.png`, mirror the box pattern: load it in
-`loadFxArt()`, add a draw helper, and call it from `applyTunaPower()` /
-`applySlotPower()`.
+To add a `slot.png`, mirror the box pattern: load it in `loadFxArt()`, add a
+draw helper, and call it from `applySlotPower()`.
 
 Overlay/preview colors (in `render()`):
 

@@ -514,6 +514,10 @@
             img.onload = function () { FX_ART.box = this; };
             img.onerror = function () { FX_ART.box = null; };
             img.src = 'assets/fx/box.png';
+            const img2 = new Image();
+            img2.onload = function () { FX_ART.tuna = this; };
+            img2.onerror = function () { FX_ART.tuna = null; };
+            img2.src = 'assets/fx/tuna.png';
         }
         function drawBoxSprite(x, y, size) {
             const g = game.ctx;
@@ -533,6 +537,34 @@
             g.fillRect(x + size * 0.64, y - size * 0.06, size * 0.16, size * 0.2);
             g.fillStyle = '#b07a3c';
             g.fillRect(x + size * 0.4, y + pad + size * 0.08, size * 0.2, size * 0.45);
+        }
+        function drawTunaSprite(x, y, size) {
+            const g = game.ctx;
+            if (FX_ART.tuna) {
+                g.drawImage(FX_ART.tuna, x, y, size, size);
+                return;
+            }
+            // Placeholder tuna can (replace by dropping assets/fx/tuna.png)
+            const w = size * 0.88, h = size * 0.8;
+            g.fillStyle = '#cfd8dc';
+            g.fillRect(x + (size - w) / 2, y + (size - h) / 2, w, h);
+            g.strokeStyle = '#90a4ae';
+            g.lineWidth = Math.max(1, size * 0.02);
+            g.strokeRect(x + (size - w) / 2, y + (size - h) / 2, w, h);
+            g.fillStyle = '#b0bec5';
+            g.fillRect(x + (size - w) / 2 + size * 0.05, y + (size - h) / 2 + size * 0.07, w - size * 0.1, size * 0.12);
+            g.strokeStyle = '#607d8b';
+            g.lineWidth = Math.max(1.5, size * 0.03);
+            g.beginPath();
+            g.arc(x + size / 2, y + (size - h) / 2 + size * 0.13, size * 0.055, 0, Math.PI * 2);
+            g.stroke();
+            g.fillStyle = '#e53935';
+            g.fillRect(x + (size - w) / 2 + size * 0.05, y + (size - h) / 2 + size * 0.34, w - size * 0.1, size * 0.3);
+            g.fillStyle = '#ffffff';
+            g.font = 'bold ' + Math.max(8, size * 0.13) + 'px sans-serif';
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.fillText('TUNA', x + size / 2, y + size * 0.52, w - size * 0.16);
         }
         
         // Game state
@@ -1273,23 +1305,12 @@
             const points = affected.length * 20;
             game.score += points;
             
-            affected.forEach(m => {
-                createParticles(
-                    m.col * game.tileSize + game.tileSize / 2,
-                    m.row * game.tileSize + game.tileSize / 2,
-                    CAT_TYPES[game.grid[m.row][m.col].type],
-                    game.grid[m.row][m.col].type
-                );
-                game.grid[m.row][m.col].matched = true;
-            });
-            
-            await animateRemoval(affected);
+            await animateTunaSwarm(row, col, affected);
             
             affected.forEach(m => {
-                game.grid[m.row][m.col].type = -1;
-                game.grid[m.row][m.col].matched = false;
                 game.grid[m.row][m.col].scale = 1;
                 game.grid[m.row][m.col].alpha = 1;
+                game.grid[m.row][m.col].matched = false;
             });
             
             updateUI();
@@ -1778,6 +1799,69 @@
             if (bi !== -1) game.effects.splice(bi, 1);
         }
         
+        // Tuna power animation: the can pops into view, then every affected cat
+        // swarms it all at once (concurrent flights, no stagger), vanishing as
+        // it arrives. The can wiggles and pops out afterward.
+        async function animateTunaSwarm(row, col, affected) {
+            const cx = col * game.tileSize + game.tileSize / 2;
+            const cy = row * game.tileSize + game.tileSize / 2;
+            
+            const can = { kind: 'tuna', cx: cx, cy: cy, scale: 0, rotation: 0, alpha: 1 };
+            game.effects.push(can);
+            
+            // Tuna can pops into view with a bounce
+            await tween(320, p => {
+                can.scale = easeOutBounce(p);
+                can.cy = cy - Math.sin(p * Math.PI) * game.tileSize * 0.05;
+            });
+            
+            // All affected cats swarm the can at the same time
+            const flights = affected.map(m =>
+                (async () => {
+                    const tile = game.grid[m.row][m.col];
+                    if (tile.type === -1) return;
+                    
+                    const artIndex = tile.type;
+                    const scx = m.col * game.tileSize + game.tileSize / 2;
+                    const scy = m.row * game.tileSize + game.tileSize / 2;
+                    const flier = {
+                        kind: 'cat', artIndex: artIndex,
+                        x: scx, y: scy, scale: 1, alpha: 1
+                    };
+                    game.effects.push(flier);
+                    
+                    // The original cat disappears as its copy swarms
+                    tile.type = -1;
+                    
+                    // Slight per-cat jitter so the swarm converges on the can
+                    const tx = cx + (Math.random() - 0.5) * game.tileSize * 0.35;
+                    const ty = cy + (Math.random() - 0.5) * game.tileSize * 0.35;
+                    
+                    await tween(200, p => {
+                        const t = easeOutCubic(p);
+                        flier.x = scx + (tx - scx) * t;
+                        flier.y = scy + (ty - scy) * t - Math.sin(p * Math.PI) * game.tileSize * 0.45;
+                        flier.scale = 1 - t * 0.8;
+                        flier.alpha = t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1;
+                    });
+                    
+                    const idx = game.effects.indexOf(flier);
+                    if (idx !== -1) game.effects.splice(idx, 1);
+                })()
+            );
+            await Promise.all(flights);
+            
+            // Can wiggles and pops out
+            await tween(240, p => {
+                can.scale = 1 + Math.sin(p * Math.PI * 4) * (1 - p) * 0.06;
+                can.rotation = Math.sin(p * Math.PI * 4) * (1 - p) * 0.15;
+                can.alpha = p < 0.6 ? 1 : 1 - (p - 0.6) / 0.4;
+            });
+            
+            const ci = game.effects.indexOf(can);
+            if (ci !== -1) game.effects.splice(ci, 1);
+        }
+        
         // Point on a quadratic bezier curve
         function bezierPoint(x0, y0, cx, cy, x1, y1, t) {
             const u = 1 - t;
@@ -2176,6 +2260,14 @@
                     ctx.rotate(e.rotation || 0);
                     ctx.globalAlpha = e.alpha;
                     drawBoxSprite(-size / 2, -size / 2, size);
+                    ctx.restore();
+                } else if (e.kind === 'tuna') {
+                    const size = game.tileSize * 1.25 * e.scale;
+                    ctx.save();
+                    ctx.translate(e.cx, e.cy);
+                    ctx.rotate(e.rotation || 0);
+                    ctx.globalAlpha = e.alpha;
+                    drawTunaSprite(-size / 2, -size / 2, size);
                     ctx.restore();
                 } else if (e.kind === 'cat') {
                     drawTileArt(e.artIndex, e.x, e.y, game.tileSize * 0.6 * e.scale, e.alpha);
