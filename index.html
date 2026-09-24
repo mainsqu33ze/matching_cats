@@ -334,6 +334,18 @@
             transform: scale(0.98);
         }
         
+        .btn.ghost {
+            background: white;
+            color: #764ba2;
+            border: 2px solid #764ba2;
+            padding: 10px 24px;
+        }
+        
+        .btn.ghost:hover {
+            background: #f3effa;
+            box-shadow: 0 5px 20px rgba(118, 75, 162, 0.25);
+        }
+        
         .overlay {
             position: fixed;
             top: 0;
@@ -399,6 +411,41 @@
             margin-left: 20px;
         }
         
+        .about {
+            background: #fdf6ee;
+            border: 1px dashed #d9a05b;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin: 14px 0 4px;
+            text-align: left;
+            line-height: 1.55;
+            max-height: 46vh;
+            overflow-y: auto;
+        }
+        
+        .about h3 {
+            color: #764ba2;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin: 12px 0 4px;
+        }
+        
+        .about h3:first-child {
+            margin-top: 0;
+        }
+        
+        .about ul {
+            margin: 0 0 6px 18px;
+            padding: 0;
+            font-size: 0.82em;
+            color: #444;
+        }
+        
+        .about .btn {
+            margin-top: 8px;
+        }
+        
         .instructions li {
             margin-bottom: 5px;
         }
@@ -460,31 +507,43 @@
         <div class="modal">
             <h2>Welcome to Meow Match!</h2>
             <div class="cats-preview">&#128049; &#128570; &#128568;</div>
-            <p>Match 3 or more cats in a row to score points!</p>
-            <div class="instructions">
-                <h3>How to Play:</h3>
+            <p>Match 3 or more cats in a row to score points&mdash;the bigger the chain, the bigger the payoff!</p>
+            <button class="btn" id="startBtn">Start Playing!</button>
+            <button class="btn ghost" id="aboutGameBtn" type="button">&#128214; About the Game</button>
+            <button class="btn hidden" id="resumeSaveBtn"></button>
+            
+            <div class="about hidden" id="aboutSection">
+                <h3>Rules</h3>
                 <ul>
-                    <li>Tap a cat, then tap an adjacent cat to swap</li>
-                    <li>Or swipe to swap cats</li>
-                    <li>Match 3+ identical cats to score</li>
+                    <li>Tap a cat, then tap an adjacent cat to swap (or swipe)</li>
+                    <li>Match 3+ identical cats to score points</li>
+                    <li>Cascades double your points every chain&mdash;and earn powers too</li>
+                    <li>Powers carry over between levels!</li>
+                    <li>Reach the goal score AND finish the level's objectives to advance</li>
+                </ul>
+                <h3>Powers</h3>
+                <ul>
                     <li>Match 4 cats = &#128230; Box power!</li>
                     <li>Match 5+ cats = &#127843; Tuna power!</li>
                     <li>Fill a row AND a column = &#129668; Cat Wand! (swap any 2 cats free)</li>
                     <li>Score an 8x combo = &#127920; Slot Machine power!</li>
-                    <li>Cascades double your points every chain!</li>
-                    <li>Follow-up cascade matches earn powers too!</li>
-                    <li>Powers carry over between levels!</li>
-                    <li>Reach the goal score to advance</li>
-                    <li>&#10052; Ice &amp; &#128230; crates melt when you match beside them; &#129704; rocks need powers!</li>
-                    <li>&#128163; Countdown bombs tick down every turn - match them to defuse!</li>
-                    <li>Later levels add quota colors, &#128142; deliveries, &#128118; baby cats &amp; runner cats!</li>
+                </ul>
+                <h3>Special Tiles</h3>
+                <ul>
+                    <li>&#10052; Ice &amp; &#128230; crates melt when you match beside them</li>
+                    <li>&#129704; Rocks need a power or bomb blast to break!</li>
+                    <li>&#128163; Countdown bombs tick down every turn&mdash;match them to defuse!</li>
+                    <li>Later levels add quota colors, &#128142; deliveries, &#128118; babies &amp; runner cats!</li>
+                </ul>
+                <h3>Progress</h3>
+                <ul>
+                    <li>Points add to your total at the end of every level</li>
                     <li>Beat 28 levels to face the FINAL BOSS!</li>
-                    <li>Points add to your total at the end of every level!</li>
                     <li>Jot down your save code to pick up where you left off!</li>
                 </ul>
+                <button class="btn ghost" id="aboutCloseBtn" type="button">Close</button>
             </div>
-            <button class="btn" id="startBtn">Start Playing!</button>
-            <button class="btn hidden" id="resumeSaveBtn"></button>
+            
             <div class="code-entry">
                 <p style="margin: 0 0 8px; color: #888; font-size: 0.9em;">Have a code? Enter it to jump back in:</p>
                 <input type="text" id="codeInput" maxlength="9" placeholder="17-003400" inputmode="numeric" pattern="[0-9-]*" autocomplete="off">
@@ -1135,6 +1194,20 @@
             document.getElementById('startBtn').addEventListener('click', () => {
                 document.getElementById('welcomeOverlay').classList.add('hidden');
                 saveProgress();
+            });
+            
+            // About the Game section (rules, powers, special tiles)
+            const aboutSection = document.getElementById('aboutSection');
+            const aboutGameBtn = document.getElementById('aboutGameBtn');
+            const toggleAbout = (show) => {
+                aboutSection.classList.toggle('hidden', !show);
+                aboutGameBtn.textContent = show ? 'Close' : '\u{1F4D6} About the Game';
+            };
+            aboutGameBtn.addEventListener('click', () => {
+                toggleAbout(aboutSection.classList.contains('hidden'));
+            });
+            document.getElementById('aboutCloseBtn').addEventListener('click', () => {
+                toggleAbout(false);
             });
             
             document.getElementById('newGameBtn').addEventListener('click', () => {
