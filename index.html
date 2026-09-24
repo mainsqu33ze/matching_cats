@@ -163,6 +163,32 @@
             background: linear-gradient(90deg, #e74c3c, #e67e22);
         }
         
+        #objChips {
+            margin-top: 8px;
+            font-size: 0.78em;
+            color: #7f8c8d;
+            line-height: 1.5;
+            text-align: center;
+            font-weight: 600;
+        }
+        
+        #objChips:not(:empty) {
+            color: #5a3d2b;
+            background: #fff7ec;
+            border: 1px dashed #d9a05b;
+            border-radius: 10px;
+            padding: 4px 8px;
+        }
+        
+        .quota-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            vertical-align: -1px;
+            box-shadow: 0 0 0 2px #fff, 0 0 3px rgba(0, 0, 0, 0.35);
+        }
+        
         .boss-banner {
             text-align: center;
             font-size: 0.85em;
@@ -424,6 +450,7 @@
             <div class="progress-bar">
                 <div class="progress-fill" id="progressFill" style="width: 0%"></div>
             </div>
+            <div id="objChips"></div>
         </div>
         
         <button class="btn" id="newGameBtn">New Game</button>
@@ -448,6 +475,9 @@
                     <li>Follow-up cascade matches earn powers too!</li>
                     <li>Powers carry over between levels!</li>
                     <li>Reach the goal score to advance</li>
+                    <li>&#10052; Ice &amp; &#128230; crates melt when you match beside them; &#129704; rocks need powers!</li>
+                    <li>&#128163; Countdown bombs tick down every turn - match them to defuse!</li>
+                    <li>Later levels add quota colors, &#128142; deliveries, &#128118; baby cats &amp; runner cats!</li>
                     <li>Beat 28 levels to face the FINAL BOSS!</li>
                     <li>Points add to your total at the end of every level!</li>
                     <li>Jot down your save code to pick up where you left off!</li>
@@ -502,6 +532,20 @@
             '\u{1F63D}', // kissing cat
             '\u{1F640}', // weary cat
             '\u{1F63E}'  // pouting cat
+        ];
+        
+        // One solid colour per cat art index, used to make quota objectives
+        // readable on the board (tiles use photos, so a colour ring + a matching
+        // chip swatch tell the player which cat to hunt).
+        const ART_COLORS = [
+            '#e74c3c', // red
+            '#e67e22', // orange
+            '#9b59b6', // purple
+            '#2ecc71', // green
+            '#3498db', // blue
+            '#f1c40f', // yellow
+            '#e84393', // pink
+            '#1abc9c'  // teal
         ];
         
         // Custom art: drop PNGs in assets/cats/cat0.png ... cat7.png and they
@@ -622,14 +666,22 @@
             activePower: null,
             powerTargetPreview: null,
             wandSelection: null,
-            reel: null
+            reel: null,
+            runners: [],
+            babies: [],
+            obj: null,
+            shakeUntil: 0
         };
         
         // Generate 29 level configurations
         function generateLevelConfigs() {
             const configs = [];
+            const exitPair = (s) => [0, s - 1];
+            const quotaColor = (i, types) => (i * 7) % types;
+            
             for (let i = 1; i <= 29; i++) {
                 let gridSize, numCatTypes, moves, goal, hasSpecials;
+                const objective = {};
                 
                 if (i <= 5) {
                     // Levels 1-5: Tutorial/Easy
@@ -645,37 +697,64 @@
                     moves = 25 + Math.floor((i-5) * 1.5);
                     goal = 500 + ((i-5) * 150);
                     hasSpecials = true;
-                } else if (i <= 15) {
-                    // Levels 11-15: Medium
+                } else if (i <= 12) {
+                    // Levels 11-12: mild growth, still gentle
                     gridSize = 6;
                     numCatTypes = 5;
-                    moves = 22 + Math.floor((i-10) * 1);
-                    goal = 700 + ((i-10) * 200);
+                    moves = 22;
+                    goal = 900 + ((i-10) * 150);
                     hasSpecials = true;
                 } else if (i <= 20) {
-                    // Levels 16-20: Hard
-                    gridSize = 7;
+                    // Levels 13-20: PLATEAU - board freezes at 6x6 / 6 types
+                    // so newer mechanics stay readable and mobile-friendly
+                    gridSize = 6;
                     numCatTypes = 6;
-                    moves = 20 + Math.floor((i-15) * 0.5);
-                    goal = 900 + ((i-15) * 250);
+                    moves = 20;
+                    goal = 1200 + ((i-13) * 170);
                     hasSpecials = true;
-                } else if (i <= 25) {
-                    // Levels 21-25: Very Hard
+                } else if (i <= 28) {
+                    // Levels 21-28: PLATEAU continues at 7x7 / 6 types
                     gridSize = 7;
                     numCatTypes = 6;
-                    moves = 18 + Math.floor((i-20) * 0.5);
-                    goal = 1200 + ((i-20) * 300);
+                    moves = 20 + Math.floor((i-20) * 0.5);
+                    goal = 1200 + ((i-20) * 200);
                     hasSpecials = true;
                 } else {
-                    // Levels 26-29: Expert
+                    // Level 29: Final Boss (epic, asked for more)
                     gridSize = 8;
                     numCatTypes = 7;
-                    moves = 18;
-                    goal = 1500 + ((i-25) * 400);
+                    moves = 20;
+                    goal = 3000;
                     hasSpecials = true;
                 }
                 
-                configs.push({
+                const TYPES = numCatTypes;
+                
+                // --- Objective / blocker curve (introduced gradually) ---
+                if (i === 8) objective.ice = 4;                                  // first ice
+                if (i === 9) objective.ice = 6;
+                if (i === 10) { objective.ice = 6; objective.quota = { color: quotaColor(i, TYPES), count: 12 }; }
+                if (i === 11) { objective.ice = 6; objective.quota = { color: quotaColor(i, TYPES), count: 14 }; }
+                if (i === 12) { objective.crate = 6; objective.quota = { color: quotaColor(i, TYPES), count: 16 }; }
+                if (i === 13) { objective.crate = 8; objective.quota = { color: quotaColor(i, TYPES), count: 16 }; }
+                if (i === 14) { objective.crate = 8; objective.bombs = 1; objective.bombTicks = 5; objective.quota = { color: quotaColor(i, TYPES), count: 14 }; }
+                if (i === 15) { objective.ice = 4; objective.crate = 8; objective.bombs = 2; objective.bombTicks = 4; objective.blocks = true; objective.quota = { color: quotaColor(i, TYPES), count: 12 }; }
+                if (i === 16) { objective.crate = 10; objective.bombs = 2; objective.bombTicks = 4; objective.blocks = true; }
+                if (i === 17) { objective.crate = 8; objective.rock = 4; objective.bombs = 2; objective.bombTicks = 4; objective.blocks = true; }   // first rocks
+                if (i === 18) { objective.rock = 6; objective.ingredients = 2; objective.exits = exitPair(gridSize); objective.blocks = true; }      // first deliveries
+                if (i === 19) { objective.rock = 4; objective.ingredients = 3; objective.exits = exitPair(gridSize); objective.quota = { color: quotaColor(i, TYPES), count: 16 }; objective.blocks = true; }
+                if (i === 20) { objective.ice = 6; objective.rock = 4; objective.ingredients = 3; objective.exits = exitPair(gridSize); objective.blocks = true; }
+                if (i === 21) { objective.crate = 8; objective.ingredients = 4; objective.exits = exitPair(gridSize); objective.babies = 1; }        // first babies
+                if (i === 22) { objective.ingredients = 3; objective.exits = exitPair(gridSize); objective.babies = 2; objective.quota = { color: quotaColor(i, TYPES), count: 14 }; }
+                if (i === 23) { objective.bombs = 2; objective.bombTicks = 4; objective.ingredients = 4; objective.exits = exitPair(gridSize); objective.babies = 2; objective.quota = { color: quotaColor(i, TYPES), count: 12 }; }
+                if (i === 24) { objective.ice = 6; objective.crate = 6; objective.bombs = 2; objective.bombTicks = 4; objective.babies = 3; objective.blocks = true; }
+                if (i === 25) { objective.ingredients = 3; objective.exits = exitPair(gridSize); objective.babies = 2; objective.runnerColor = 0; }   // first runner
+                if (i === 26) { objective.ice = 6; objective.bombs = 2; objective.bombTicks = 4; objective.quota = { color: quotaColor(i, TYPES), count: 18 }; objective.blocks = true; objective.runnerColor = 1; }
+                if (i === 27) { objective.ingredients = 3; objective.exits = exitPair(gridSize); objective.babies = 3; objective.runnerColor = 2; }
+                if (i === 28) { objective.ingredients = 4; objective.exits = exitPair(gridSize); objective.bombs = 2; objective.bombTicks = 4; objective.quota = { color: quotaColor(i, TYPES), count: 16 }; objective.runnerColor = 0; }
+                if (i === 29) { objective.rock = 4; objective.crate = 6; objective.bombs = 2; objective.bombTicks = 5; objective.blocks = true; objective.quota = { color: quotaColor(i, TYPES), count: 20 }; objective.runnerColor = 1; }
+                
+                const config = {
                     level: i,
                     gridSize: gridSize,
                     numCatTypes: Math.min(numCatTypes, CAT_TYPES.length),
@@ -683,9 +762,43 @@
                     goal: goal,
                     hasSpecials: hasSpecials,
                     name: getLevelName(i)
-                });
+                };
+                
+                if (Object.keys(objective).length > 0) configurationBlockers(config, objective);
+                config.ice = config.ice || 0;
+                config.crate = config.crate || 0;
+                config.rock = config.rock || 0;
+                config.bombs = config.bombs || 0;
+                config.bombTicks = config.bombTicks || 4;
+                config.blocks = !!config.blocks;
+                config.objective = config.objective || null;
+                configs.push(config);
             }
             return configs;
+        }
+        
+        // Share the objective details onto a level config
+        function configurationBlockers(config, objective) {
+            config.ice = objective.ice || 0;
+            config.crate = objective.crate || 0;
+            config.rock = objective.rock || 0;
+            config.bombs = objective.bombs || 0;
+            config.bombTicks = objective.bombTicks || 4;
+            config.blocks = !!objective.blocks;
+            config.objective = objectKeys(objective);
+            if (objective.runnerColor !== undefined) config.runnerColor = objective.runnerColor;
+        }
+        
+        // Build the per-level objective tracker from a config's raw objective object
+        function objectKeys(objective) {
+            return {
+                quota: objective.quota || null,
+                ingredients: objective.ingredients || 0,
+                exits: objective.exits || [],
+                babies: objective.babies || 0,
+                runnerColor: objective.runnerColor !== undefined ? objective.runnerColor : null,
+                blocks: !!objective.blocks
+            };
         }
         
         function getLevelName(level) {
@@ -728,15 +841,25 @@
             const dpr = window.devicePixelRatio || 1;
             
             // Internal resolution scaled for retina displays
-            game.canvas.width = Math.round(maxWidthFinal * dpr);
-            game.canvas.height = Math.round(maxWidthFinal * dpr);
+            game.laneH = levelHasRunner() ? 30 : 0;
+            const boardPx = maxWidthFinal;
+            const totalH = boardPx + game.laneH;
+            game.canvas.width = Math.round(boardPx * dpr);
+            game.canvas.height = Math.round(totalH * dpr);
             
             // CSS size in logical pixels
-            game.canvas.style.width = maxWidthFinal + 'px';
-            game.canvas.style.height = maxWidthFinal + 'px';
+            game.canvas.style.width = boardPx + 'px';
+            game.canvas.style.height = totalH + 'px';
             
             game.tileSize = maxWidthFinal / game.gridSize;
             game.dpr = dpr;
+        }
+        
+        // Whether the current level has a runner/courier objective (which adds a
+        // delivery lane strip below the board)
+        function levelHasRunner() {
+            const config = game.levelConfigs && game.levelConfigs[game.currentLevel - 1];
+            return !!config && !!(config.runnerColor !== undefined && config.runnerColor !== null);
         }
         
         function loadLevel(level) {
@@ -756,6 +879,8 @@
             setupCanvas();
             generateGrid(config.numCatTypes);
             removeInitialMatches(config.numCatTypes);
+            applyLevelDecor(config);
+            ensureQuotaSupply();
             
             updateUI();
             updatePowerUI();
@@ -784,6 +909,134 @@
             render();
         }
         
+        // Scatter the current level's blockers, bombs, ingredients, babies and runner
+        // onto a fresh board according to its config. With keepProgress true the
+        // in-progress objective counters survive (used by the slot replay).
+        function applyLevelDecor(config, keepProgress) {
+            game.runners = [];
+            game.babies = [];
+            
+            const oldProgress = (game.obj && keepProgress) ? {
+                quotaProgress: game.obj.quotaProgress,
+                ingredientsCollected: game.obj.ingredientsCollected
+            } : null;
+            
+            game.obj = {
+                quotaColor: null,
+                quotaTarget: 0,
+                quotaProgress: 0,
+                ingredientsTarget: 0,
+                ingredientsCollected: 0,
+                babiesTarget: 0,
+                runnerCount: 0,
+                blocksTarget: 0,
+                exits: []
+            };
+            
+            const deco = config.objective || {};
+            
+            if (deco.quota) {
+                game.obj.quotaColor = deco.quota.color % config.numCatTypes;
+                game.obj.quotaTarget = deco.quota.count;
+            }
+            game.obj.ingredientsTarget = deco.ingredients || 0;
+            game.obj.exits = deco.exits || [];
+            game.obj.babiesTarget = deco.babies || 0;
+            
+            if (oldProgress) {
+                game.obj.quotaProgress = Math.min(game.obj.quotaTarget, oldProgress.quotaProgress);
+                game.obj.ingredientsCollected = Math.min(game.obj.ingredientsTarget, oldProgress.ingredientsCollected);
+            }
+            
+            // Lexical free-cells helper (excludes blockers, food, and other spawns)
+            const freeCells = (opts) => {
+                const arr = [];
+                for (let r = 0; r < game.gridSize; r++) {
+                    for (let c = 0; c < game.gridSize; c++) {
+                        const t = game.grid[r][c];
+                        if (t.type < 0) continue;
+                        if (t.ice > 0 || t.crate > 0 || t.rock) continue;
+                        if (t.ingredient === 1) continue;
+                        if (opts && opts.noBottomRow && r === game.gridSize - 1) continue;
+                        arr.push({ row: r, col: c });
+                    }
+                }
+                return arr;
+            };
+            
+            const placeRandom = (count, pick) => {
+                let placed = 0;
+                while (placed < count) {
+                    const arr = freeCells({ noBottomRow: false });
+                    if (!arr.length) break;
+                    const chosen = arr[Math.floor(Math.random() * arr.length)];
+                    pick(chosen.row, chosen.col, placed);
+                    placed++;
+                }
+                return placed;
+            };
+            
+            placeRandom(config.ice || 0, (r, c) => {
+                game.grid[r][c].ice = 1 + Math.floor(Math.random() * 2);
+            });
+            placeRandom(config.crate || 0, (r, c) => {
+                game.grid[r][c].crate = 1 + Math.floor(Math.random() * 2);
+            });
+            placeRandom(config.rock || 0, (r, c) => {
+                game.grid[r][c].rock = 1;
+            });
+            placeRandom(config.bombs || 0, (r, c) => {
+                game.grid[r][c].bomb = config.bombTicks || 4;
+            });
+            
+            // Delivery ingredients (in earlier rows of the exit columns)
+            if (deco.ingredients) {
+                const exits = deco.exits || [];
+                for (let i = 0; i < deco.ingredients && exits.length; i++) {
+                    const col = exits[i % exits.length];
+                    let placed = false;
+                    for (let r = 0; r < Math.max(1, Math.floor(game.gridSize / 2)); r++) {
+                        const t = game.grid[r][col];
+                        if (t.type >= 0 && t.ice === 0 && t.crate === 0 && !t.rock && t.ingredient !== 1) {
+                            t.type = -2;
+                            t.ingredient = 1;
+                            placed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Baby riders (skip the bottom row)
+            if (deco.babies) {
+                for (let i = 0; i < deco.babies; i++) {
+                    const arr = freeCells({ noBottomRow: true });
+                    if (!arr.length) break;
+                    const chosen = arr[Math.floor(Math.random() * arr.length)];
+                    game.babies.push({
+                        row: chosen.row,
+                        col: chosen.col,
+                        color: Math.floor(Math.random() * config.numCatTypes),
+                        done: false
+                    });
+                }
+            }
+            
+            // Runner / delivery cat in the lane below the board
+            if (deco.runnerColor !== undefined && deco.runnerColor !== null) {
+                game.runners.push({
+                    color: deco.runnerColor % config.numCatTypes,
+                    steps: 0,
+                    maxSteps: 9,
+                    done: false
+                });
+            }
+            game.obj.runnerCount = game.runners.length;
+            
+            // "Clear the blockers" objective: how many blockers sit on the board
+            game.obj.blocksTarget = (config.blocks && countBlockers()) || 0;
+        }
+        
         function resetPowers() {
             game.powers = { box: 0, tuna: 0, slot: 0, wand: 0 };
             game.activePower = null;
@@ -807,19 +1060,30 @@
             }
         }
         
+        function makeEmptyTile(row, col) {
+            return {
+                type: -1,
+                x: col * game.tileSize,
+                y: row * game.tileSize,
+                scale: 1,
+                alpha: 1,
+                matched: false,
+                ice: 0,
+                crate: 0,
+                rock: 0,
+                bomb: 0,
+                ingredient: 0
+            };
+        }
+        
         function generateGrid(numCatTypes) {
             game.grid = [];
             for (let row = 0; row < game.gridSize; row++) {
                 game.grid[row] = [];
                 for (let col = 0; col < game.gridSize; col++) {
-                    game.grid[row][col] = {
-                        type: Math.floor(Math.random() * numCatTypes),
-                        x: col * game.tileSize,
-                        y: row * game.tileSize,
-                        scale: 1,
-                        alpha: 1,
-                        matched: false
-                    };
+                    const tile = makeEmptyTile(row, col);
+                    tile.type = Math.floor(Math.random() * numCatTypes);
+                    game.grid[row][col] = tile;
                 }
             }
         }
@@ -1142,8 +1406,7 @@
                     comboLevel++;
                 }
                 
-                updateUI();
-                checkGameState();
+                await postResolve();
             } else {
                 await animateSwap(row1, col1, row2, col2);
                 swapTiles(row1, col1, row2, col2);
@@ -1240,7 +1503,8 @@
             if (!type) return;
             
             const targetType = game.grid[row][col].type;
-            if (targetType === -1) {
+            if (targetType < 0) {
+                // Empty cells and delivery ingredients are not valid power targets
                 game.activePower = null;
                 game.wandSelection = null;
                 updatePowerUI();
@@ -1300,12 +1564,22 @@
             const affected = [];
             for (let r = 0; r < game.gridSize; r++) {
                 for (let c = 0; c < game.gridSize; c++) {
-                    if (game.grid[r][c].type === targetType &&
-                        game.grid[r][c].type !== -1 &&
+                    const t = game.grid[r][c];
+                    if (t.type === targetType &&
+                        t.type > -1 &&
+                        t.ingredient !== 1 &&
                         Math.abs(r - row) + Math.abs(c - col) <= 3) {
                         affected.push({ row: r, col: c });
                     }
                 }
+            }
+            
+            // Box shatters any blockers in its radius too
+            breakBlockersInRadius(row, col, 3);
+            
+            // Collecting the quota colour packs it toward the objective
+            if (targetType === (game.obj && game.obj.quotaColor)) {
+                creditQuotaColor(affected.length);
             }
             
             // Celebration: the box drops in and every affected cat leaps into it
@@ -1325,15 +1599,30 @@
         }
         
         // Tuna power: remove all cats within Manhattan distance 2 of (row,col)
-        async function applyTunaPower(row, col) {
+        // Tuna blast radius membership (quota cats are spared; ingredients and empty
+        // cells are never lured), so the animation and the raid stay in sync and
+        // it is easy to assert which tiles a blast will hit.
+        function tunaAffected(row, col) {
             const affected = [];
             for (let r = 0; r < game.gridSize; r++) {
                 for (let c = 0; c < game.gridSize; c++) {
-                    if (Math.abs(r - row) + Math.abs(c - col) <= 2 && game.grid[r][c].type !== -1) {
+                    const t = game.grid[r][c];
+                    // Tuna lures cats but never dug-up ingredients, empty cells,
+                    // or the quota colour (those stay matchable)
+                    if (Math.abs(r - row) + Math.abs(c - col) <= 2 &&
+                        t.type !== -1 && t.ingredient !== 1 && !isQuotaProtected(t)) {
                         affected.push({ row: r, col: c });
                     }
                 }
             }
+            return affected;
+        }
+        
+        async function applyTunaPower(row, col) {
+            const affected = tunaAffected(row, col);
+            
+            // Tuna blast shatters any blockers in its radius too
+            breakBlockersInRadius(row, col, 2);
             
             const points = affected.length * 20;
             game.score += points;
@@ -1367,11 +1656,15 @@
             const config = game.levelConfigs[game.currentLevel - 1];
             generateGrid(config.numCatTypes);
             removeInitialMatches(config.numCatTypes);
+            // Re-scatter this level's blockers/bombs/ingredients/babies so the
+            // fresh board still matches its objectives (keep progress counters)
+            applyLevelDecor(config, true);
+            // The new board must still carry the quota colour to match
+            ensureQuotaSupply();
             
             await animateSlotSpin(config.numCatTypes);
             
-            updateUI();
-            checkGameState();
+            await postResolve();
         }
         
         // Slot reel animation: every column spins in place for a few seconds,
@@ -1429,8 +1722,7 @@
                 matches = findMatches();
                 comboLevel++;
             }
-            updateUI();
-            checkGameState();
+            await postResolve();
         }
         
         function findEmptyCells() {
@@ -1456,13 +1748,19 @@
             const groups = [];
             const visited = new Set();
             
+            function matchable(row, col) {
+                const t = game.grid[row][col];
+                return t && t.type >= 0 && !t.ice && !t.crate && !t.rock;
+            }
+            
             for (let row = 0; row < game.gridSize; row++) {
                 let col = 0;
                 while (col < game.gridSize) {
                     const type = game.grid[row][col].type;
-                    if (type === -1) { col++; continue; }
+                    if (!matchable(row, col)) { col++; continue; }
                     let len = 1;
-                    while (col + len < game.gridSize && game.grid[row][col + len].type === type) len++;
+                    while (col + len < game.gridSize && matchable(row, col + len) &&
+                           game.grid[row][col + len].type === type) len++;
                     if (len >= 3) {
                         const cells = [];
                         for (let i = 0; i < len; i++) cells.push({ row, col: col + i });
@@ -1476,9 +1774,10 @@
                 let row = 0;
                 while (row < game.gridSize) {
                     const type = game.grid[row][col].type;
-                    if (type === -1) { row++; continue; }
+                    if (!matchable(row, col)) { row++; continue; }
                     let len = 1;
-                    while (row + len < game.gridSize && game.grid[row + len][col].type === type) len++;
+                    while (row + len < game.gridSize && matchable(row + len, col) &&
+                           game.grid[row + len][col].type === type) len++;
                     if (len >= 3) {
                         const cells = [];
                         for (let i = 0; i < len; i++) cells.push({ row: row + i, col });
@@ -1513,12 +1812,17 @@
             const matches = [];
             const matched = new Set();
             
+            function matchable(row, col) {
+                const t = game.grid[row][col];
+                return t && t.type >= 0 && !t.ice && !t.crate && !t.rock;
+            }
+            
             for (let row = 0; row < game.gridSize; row++) {
                 for (let col = 0; col < game.gridSize - 2; col++) {
                     const type = game.grid[row][col].type;
-                    if (type === -1) continue;
+                    if (!matchable(row, col)) continue;
                     let matchLength = 1;
-                    while (col + matchLength < game.gridSize && 
+                    while (col + matchLength < game.gridSize && matchable(row, col + matchLength) &&
                            game.grid[row][col + matchLength].type === type) matchLength++;
                     if (matchLength >= 3) {
                         for (let i = 0; i < matchLength; i++) {
@@ -1535,9 +1839,9 @@
             for (let col = 0; col < game.gridSize; col++) {
                 for (let row = 0; row < game.gridSize - 2; row++) {
                     const type = game.grid[row][col].type;
-                    if (type === -1) continue;
+                    if (!matchable(row, col)) continue;
                     let matchLength = 1;
-                    while (row + matchLength < game.gridSize && 
+                    while (row + matchLength < game.gridSize && matchable(row + matchLength, col) &&
                            game.grid[row + matchLength][col].type === type) matchLength++;
                     if (matchLength >= 3) {
                         for (let i = 0; i < matchLength; i++) {
@@ -1552,6 +1856,326 @@
             }
             
             return matches;
+        }
+        
+        // Ice/crate are chipped by matching next to them (same row/col for ice,
+// orthogonally adjacent for crates); rocks are only broken by powers/bombs.
+        function chipBlockers(matches) {
+            const rows = new Set();
+            const cols = new Set();
+            for (const m of matches) {
+                rows.add(m.row);
+                cols.add(m.col);
+            }
+            
+            const broken = [];
+            for (let r = 0; r < game.gridSize; r++) {
+                for (let c = 0; c < game.gridSize; c++) {
+                    const t = game.grid[r][c];
+                    if (t.ice > 0 && (rows.has(r) || cols.has(c))) {
+                        t.ice--;
+                        if (t.ice === 0) broken.push({ row: r, col: c });
+                    }
+                    if (t.crate > 0 && isAdjacentToMatch(r, c, matches)) {
+                        t.crate--;
+                        if (t.crate === 0) broken.push({ row: r, col: c });
+                    }
+                }
+            }
+            
+            if (broken.length > 0) {
+                game.score += broken.length * 20;
+                broken.forEach(b => {
+                    createParticles(
+                        b.col * game.tileSize + game.tileSize / 2,
+                        b.row * game.tileSize + game.tileSize / 2,
+                        '\u{2728}',
+                        0
+                    );
+                });
+            }
+        }
+        
+        function isAdjacentToMatch(r, c, matches) {
+            for (const m of matches) {
+                if (Math.abs(m.row - r) + Math.abs(m.col - c) === 1) return true;
+            }
+            return false;
+        }
+        
+        // Colour quota: matched cats of the required colour add to the tally
+        function addToQuota(matches) {
+            if (!game.obj || !game.obj.quotaTarget) return;
+            let add = 0;
+            for (const m of matches) {
+                if (game.grid[m.row][m.col].type === game.obj.quotaColor) add++;
+            }
+            if (add) {
+                game.obj.quotaProgress = Math.min(game.obj.quotaTarget, game.obj.quotaProgress + add);
+            }
+        }
+        
+        // Whether a tile is a quota-colour cat that powers should preserve
+        function isQuotaProtected(t) {
+            return !!(t && game.obj && game.obj.quotaTarget > 0 &&
+                game.obj.quotaColor !== null && game.obj.quotaColor >= 0 &&
+                t.type === game.obj.quotaColor);
+        }
+        
+        // Count cats of the quota colour "collected" by a power toward the quota
+        function creditQuotaColor(count) {
+            if (!count || !game.obj || !game.obj.quotaTarget || game.obj.quotaColor === null) return 0;
+            const before = game.obj.quotaProgress;
+            game.obj.quotaProgress = Math.min(game.obj.quotaTarget, game.obj.quotaProgress + count);
+            return game.obj.quotaProgress - before;
+        }
+        
+        function isMatchableCell(r, c) {
+            const t = game.grid[r][c];
+            return !!t && t.type >= 0 && !t.ice && !t.crate && !t.rock;
+        }
+        
+        // Would placing the cell's current type here create a 3-in-a-row?
+        function formsRun(r, c) {
+            const type = game.grid[r][c].type;
+            let h = 1;
+            for (let d = 1; c - d >= 0 && isMatchableCell(r, c - d) && game.grid[r][c - d].type === type; d++) h++;
+            for (let d = 1; c + d < game.gridSize && isMatchableCell(r, c + d) && game.grid[r][c + d].type === type; d++) h++;
+            if (h >= 3) return true;
+            let v = 1;
+            for (let d = 1; r - d >= 0 && isMatchableCell(r - d, c) && game.grid[r - d][c].type === type; d++) v++;
+            for (let d = 1; r + d < game.gridSize && isMatchableCell(r + d, c) && game.grid[r + d][c].type === type; d++) v++;
+            return v >= 3;
+        }
+        
+        // Guarantee the board still carries a workable supply of the quota
+        // colour (used after the slot reshuffle and on level load) by quietly
+        // converting a few safe cells - never creating an instant match.
+        function ensureQuotaSupply() {
+            const o = game.obj;
+            if (!o || !o.quotaTarget || o.quotaColor === null) return;
+            const needed = Math.max(2, Math.ceil(o.quotaTarget / 4));
+            const quota = o.quotaColor;
+            let have = 0;
+            for (let r = 0; r < game.gridSize; r++) {
+                for (let c = 0; c < game.gridSize; c++) {
+                    const t = game.grid[r][c];
+                    if (t.type === quota && isMatchableCell(r, c) && t.ingredient !== 1) have++;
+                }
+            }
+            if (have >= needed) return;
+            
+            let attempts = 0;
+            while (have < needed && attempts < 400) {
+                attempts++;
+                const r = Math.floor(Math.random() * game.gridSize);
+                const c = Math.floor(Math.random() * game.gridSize);
+                if (!isMatchableCell(r, c)) continue;
+                const t = game.grid[r][c];
+                if (t.type === quota || t.ingredient === 1 || r * 3 + c === 0) continue;
+                const old = t.type;
+                t.type = quota;
+                if (formsRun(r, c)) {
+                    t.type = old;
+                    continue;
+                }
+                have++;
+            }
+        }
+        
+        // Runner (delivery cat): each match of its colour moves it along the lane
+        function advanceRunners(groups) {
+            if (!game.runners.length || !groups) return;
+            for (const runner of game.runners) {
+                if (runner.done) continue;
+                let steps = 0;
+                for (const g of groups) {
+                    if (g.type === runner.color) {
+                        if (g.length >= 6) steps += 4;
+                        else if (g.length >= 5) steps += 3;
+                        else if (g.length >= 4) steps += 2;
+                        else steps += 1;
+                    }
+                }
+                if (steps) {
+                    runner.steps = Math.min(runner.maxSteps, runner.steps + steps);
+                    if (runner.steps >= runner.maxSteps) runner.done = true;
+                }
+            }
+        }
+        
+        // Baby cat: hops one row down whenever its colour matches in its row/col
+        function hopBabies(groups) {
+            if (!game.babies.length || !groups) return;
+            for (const baby of game.babies) {
+                if (baby.done) continue;
+                const hit = groups.some(g =>
+                    g.type === baby.color &&
+                    g.cells.some(c => c.row === baby.row || c.col === baby.col)
+                );
+                if (hit) {
+                    baby.row = Math.min(game.gridSize - 1, baby.row + 1);
+                    if (baby.row >= game.gridSize - 1) {
+                        baby.done = true;
+                        createParticles(
+                            baby.col * game.tileSize + game.tileSize / 2,
+                            (game.gridSize - 1) * game.tileSize + game.tileSize / 2,
+                            '\u{1F63D}',
+                            baby.color
+                        );
+                    }
+                }
+            }
+        }
+        
+        // Count remaining blocker tiles on the board (ice/crate/rock)
+        function countBlockers() {
+            let n = 0;
+            for (let r = 0; r < game.gridSize; r++) {
+                for (let c = 0; c < game.gridSize; c++) {
+                    const t = game.grid[r][c];
+                    if (t.ice > 0 || t.crate > 0 || t.rock) n++;
+                }
+            }
+            return n;
+        }
+        
+        // Delivery ingredients drop off the bottom row's exit columns
+        function collectIngredients() {
+            const exits = (game.obj && game.obj.exits) || [];
+            let collected = 0;
+            const exitCols = new Set(exits);
+            for (let col = 0; col < game.gridSize; col++) {
+                if (!exitCols.has(col)) continue;
+                const t = game.grid[game.gridSize - 1][col];
+                if (t && t.ingredient === 1) {
+                    t.type = -1;
+                    t.ingredient = 0;
+                    game.obj.ingredientsCollected = Math.min(
+                        game.obj.ingredientsTarget,
+                        game.obj.ingredientsCollected + 1
+                    );
+                    game.score += 250;
+                    createParticles(
+                        col * game.tileSize + game.tileSize / 2,
+                        (game.gridSize - 1) * game.tileSize + game.tileSize / 2,
+                        '\u{1F48E}',
+                        -2
+                    );
+                    collected++;
+                }
+            }
+            return collected;
+        }
+        
+        // Box/tuna powers also shatter any blockers in their radius
+        function breakBlockersInRadius(row, col, radius) {
+            let broke = 0;
+            for (let r = 0; r < game.gridSize; r++) {
+                for (let c = 0; c < game.gridSize; c++) {
+                    if (Math.abs(r - row) + Math.abs(c - col) > radius) continue;
+                    const t = game.grid[r][c];
+                    if (t.ice > 0 || t.crate > 0 || t.rock) {
+                        t.ice = 0;
+                        t.crate = 0;
+                        t.rock = 0;
+                        createParticles(
+                            c * game.tileSize + game.tileSize / 2,
+                            r * game.tileSize + game.tileSize / 2,
+                            '\u{2728}',
+                            0
+                        );
+                        broke++;
+                    }
+                }
+            }
+            if (broke) game.score += broke * 20;
+        }
+        
+        // Countdown bombs tick after every resolution; hitting 0 detonates
+        function tickBombs() {
+            const dead = [];
+            for (let r = 0; r < game.gridSize; r++) {
+                for (let c = 0; c < game.gridSize; c++) {
+                    const t = game.grid[r][c];
+                    if (t.bomb > 0) {
+                        t.bomb--;
+                        if (t.bomb === 0) dead.push({ row: r, col: c });
+                    }
+                }
+            }
+            return dead;
+        }
+        
+        function explodeBombs(dead) {
+            const doomed = new Set();
+            for (const cell of dead) {
+                for (let r = cell.row - 1; r <= cell.row + 1; r++) {
+                    for (let c = cell.col - 1; c <= cell.col + 1; c++) {
+                        if (r < 0 || r >= game.gridSize || c < 0 || c >= game.gridSize) continue;
+                        doomed.add(r + ',' + c);
+                    }
+                }
+            }
+            
+            doomed.forEach(key => {
+                const [r, c] = key.split(',').map(Number);
+                const t = game.grid[r][c];
+                if (t.type === -1) return;
+                // Never delete the tile a baby is riding (babies can't die)
+                if (game.babies.some(b => !b.done && b.row === r && b.col === c)) return;
+                t.type = -1;
+                t.ice = 0;
+                t.crate = 0;
+                t.bomb = 0;
+                t.rock = 0;
+                t.ingredient = 0;
+                createParticles(
+                    c * game.tileSize + game.tileSize / 2,
+                    r * game.tileSize + game.tileSize / 2,
+                    '\u{1F4A5}',
+                    0
+                );
+            });
+        }
+        
+        // Shared post-resolution: update UI, tick bombs, settle, re-check state
+        async function postResolve() {
+            updateUI();
+            const dead = tickBombs();
+            if (dead.length > 0) {
+                game.shakeUntil = Date.now() + 220;
+                explodeBombs(dead);
+                await settleBoard();
+            }
+            updateUI();
+            checkGameState();
+        }
+        
+        // Settle a board that may have holes: gravity, refill, and finally
+        // collect any ingredients that have reached the exit columns
+        async function settleBoard() {
+            if (findEmptyCells() > 0) {
+                await applyGravity();
+                await fillEmptySpaces();
+            }
+            updateUI();
+            if (collectIngredients() > 0) {
+                await applyGravity();
+                await fillEmptySpaces();
+                updateUI();
+            }
+        }
+        
+        // Whether every objective of the current level is fulfilled
+        function objectivesDone() {
+            if (!game.obj) return true;
+            if (game.obj.quotaTarget > 0 && game.obj.quotaProgress < game.obj.quotaTarget) return false;
+            if (game.obj.ingredientsTarget > 0 && game.obj.ingredientsCollected < game.obj.ingredientsTarget) return false;
+            if (game.obj.babiesTarget > 0 && !game.babies.every(b => b.done)) return false;
+            if (game.runners.length > 0 && !game.runners.every(r => r.done)) return false;
+            if (game.obj.blocksTarget > 0 && countBlockers() > 0) return false;
+            return true;
         }
         
         async function processMatches(matches, groups, awardsDisabled) {
@@ -1579,6 +2203,12 @@
                 updatePowerUI();
             }
             
+            // Objective side-effects of the match (blocker chips, quota, delivery)
+            chipBlockers(matches);
+            addToQuota(matches);
+            advanceRunners(groups);
+            hopBabies(groups);
+            
             // Create particles for each matched cat
             matches.forEach(match => {
                 createParticles(
@@ -1600,6 +2230,12 @@
             matches.forEach(match => {
                 game.grid[match.row][match.col].type = -1;
                 game.grid[match.row][match.col].matched = false;
+                // Matched cells were plain cats, but be thorough about decor flags
+                game.grid[match.row][match.col].ice = 0;
+                game.grid[match.row][match.col].crate = 0;
+                game.grid[match.row][match.col].bomb = 0;
+                game.grid[match.row][match.col].rock = 0;
+                game.grid[match.row][match.col].ingredient = 0;
             });
             
             updateUI();
@@ -1615,12 +2251,10 @@
                     const tile = game.grid[row][col];
                     if (tile.type !== -1) {
                         if (writeRow !== row) {
-                            // Move the tile's data down to writeRow
+                            // Move the tile object (with its decor flags) down to writeRow
                             falling.push({ fromRow: row, fromCol: col, toRow: writeRow, toCol: col });
-                            game.grid[writeRow][col].type = tile.type;
-                            game.grid[writeRow][col].scale = 1;
-                            game.grid[writeRow][col].alpha = 1;
-                            tile.type = -1;
+                            game.grid[writeRow][col] = tile;
+                            game.grid[row][col] = makeEmptyTile(row, col);
                         }
                         writeRow--;
                     }
@@ -1631,6 +2265,7 @@
                 // Position all moved tiles just above their target for animation
                 falling.forEach(f => {
                     const tile = game.grid[f.toRow][f.toCol];
+                    tile.x = f.toCol * game.tileSize;
                     tile.y = f.fromRow * game.tileSize;
                 });
                 await animateGravity();
@@ -1644,10 +2279,12 @@
             for (let row = 0; row < game.gridSize; row++) {
                 for (let col = 0; col < game.gridSize; col++) {
                     if (game.grid[row][col].type === -1) {
-                        game.grid[row][col].type = Math.floor(Math.random() * config.numCatTypes);
-                        game.grid[row][col].y = -game.tileSize;
-                        game.grid[row][col].scale = 1;
-                        game.grid[row][col].alpha = 1;
+                        // Fresh plain cat tile: replace whatever was there so no
+                        // decor flags (ice/crate/bomb) survive the refill
+                        const fresh = makeEmptyTile(row, col);
+                        fresh.type = Math.floor(Math.random() * config.numCatTypes);
+                        fresh.y = -game.tileSize;
+                        game.grid[row][col] = fresh;
                         hasEmpty = true;
                     }
                 }
@@ -2168,11 +2805,25 @@
         }
         
         function checkGameState() {
-            if (game.score >= game.goalScore) {
+            if (game.score >= game.goalScore && objectivesDone()) {
+                updateChips();
                 setTimeout(() => showLevelComplete(), 300);
             } else if (game.moves <= 0) {
                 setTimeout(() => showGameOver(), 300);
             }
+        }
+        
+        // Human-readable summary of the level's objectives and their status
+        function objectiveReport() {
+            const o = game.obj;
+            if (!o) return '';
+            const bits = [];
+            if (o.quotaTarget > 0) bits.push(`quota ${o.quotaProgress}/${o.quotaTarget}`);
+            if (o.ingredientsTarget > 0) bits.push(`deliveries ${o.ingredientsCollected}/${o.ingredientsTarget}`);
+            if (o.babiesTarget > 0) bits.push(`babies ${game.babies.filter(b => b.done).length}/${o.babiesTarget}`);
+            if (o.runnerCount > 0) bits.push(`runner ${game.runners.filter(r => r.done).length}/${o.runnerCount}`);
+            if (o.blocksTarget > 0) bits.push(`blockers ${countBlockers()}/${o.blocksTarget}`);
+            return bits.length ? '  (' + bits.join(', ') + ')' : '';
         }
         
         function showLevelComplete() {
@@ -2205,7 +2856,7 @@
                 nextBtn.textContent = '\u{1F479} Fight the Boss!';
             } else {
                 title.textContent = 'Level Complete!';
-                message.textContent = `Great job completing Level ${game.currentLevel}!`;
+                message.textContent = `Great job completing Level ${game.currentLevel}!${objectiveReport()}`;
                 emoji.textContent = '\u{1F63A} \u{1F63B} \u{1F638}';
                 nextBtn.textContent = 'Next Level';
             }
@@ -2230,6 +2881,13 @@
         
         function showGameOver() {
             document.getElementById('gameOverOverlay').classList.remove('hidden');
+            const p = document.querySelector('#gameOverOverlay p');
+            const remaining = objectiveReport();
+            if (p) {
+                p.textContent = remaining
+                    ? `So close! You still need ${remaining.replace(/^  \(/, '').replace(/\)$/, '')}. Give it another go!`
+                    : "Don't give up! Try again!";
+            }
         }
         
         function showComboPopup(text) {
@@ -2269,21 +2927,220 @@
             }
             
             updatePowerUI();
+            updateChips();
             progressFill.style.width = `${progress}%`;
+        }
+        
+        // Build the little objective chips that appear under the progress bar
+        function updateChips() {
+            const chips = document.getElementById('objChips');
+            if (!chips) return;
+            const o = game.obj;
+            const parts = [];
+            
+            if (o && o.quotaTarget > 0 && o.quotaColor !== null) {
+                const color = ART_COLORS[o.quotaColor % ART_COLORS.length];
+                parts.push(`<span class="quota-dot" style="background:${color}"></span> quota ${o.quotaProgress}/${o.quotaTarget}`);
+            }
+            if (o && o.ingredientsTarget > 0) {
+                parts.push(`\u{1F48E} ${o.ingredientsCollected}/${o.ingredientsTarget}`);
+            }
+            if (o && o.babiesTarget > 0) {
+                parts.push(`\u{1F63D} ${game.babies.filter(b => b.done).length}/${o.babiesTarget}`);
+            }
+            if (game.runners.length > 0) {
+                parts.push(`\u{1F3C1} ${game.runners.filter(r => r.done).length}/${game.runners.length}`);
+            }
+            if (o && o.blocksTarget > 0) {
+                parts.push(`\u{2696} ${countBlockers()}/${o.blocksTarget}`);
+            }
+            
+            chips.innerHTML = parts.length ? parts.join('  ') : '';
+        }
+        
+        // Frosty ice underlay drawn behind the tile artwork
+        function drawIceOverlay(x, y, s, layers) {
+            const ctx = game.ctx;
+            const alpha = layers >= 2 ? 0.75 : 0.45;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#d6f3ff';
+            ctx.fillRect(x + 2, y + 2, s - 4, s - 4);
+            ctx.strokeStyle = '#9ad7f2';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x + s * 0.3, y + s * 0.15);
+            ctx.lineTo(x + s * 0.45, y + s * 0.5);
+            ctx.lineTo(x + s * 0.2, y + s * 0.82);
+            ctx.moveTo(x + s * 0.65, y + s * 0.25);
+            ctx.lineTo(x + s * 0.55, y + s * 0.62);
+            ctx.lineTo(x + s * 0.8, y + s * 0.85);
+            ctx.stroke();
+            ctx.restore();
+        }
+        
+        // Chunky grey rock that only powers and bombs can break
+        function drawRockSprite(cx, cy, size) {
+            const ctx = game.ctx;
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.fillStyle = '#9b9b9b';
+            ctx.beginPath();
+            ctx.ellipse(0, 2, size * 0.62, size * 0.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#bdbdbd';
+            ctx.beginPath();
+            ctx.ellipse(-size * 0.15, -size * 0.1, size * 0.38, size * 0.26, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#e7e7e7';
+            ctx.beginPath();
+            ctx.ellipse(-size * 0.22, -size * 0.2, size * 0.12, size * 0.08, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#7a7a7a';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(0, 2, size * 0.62, size * 0.5, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+        
+        // Wrapped delivery (the collection objective)
+        function drawIngredientSprite(cx, cy, size) {
+            const ctx = game.ctx;
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.fillStyle = '#f1c40f';
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 0.55);
+            ctx.lineTo(size * 0.55, 0);
+            ctx.lineTo(0, size * 0.55);
+            ctx.lineTo(-size * 0.55, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#c9a227';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-size * 0.09, -size * 0.55, size * 0.18, size * 1.1);
+            ctx.fillRect(-size * 0.55, -size * 0.09, size * 1.1, size * 0.18);
+            ctx.fillStyle = '#e74c3c';
+            ctx.beginPath();
+            ctx.arc(0, 0, size * 0.13, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+        
+        // Wooden crate overlay (hinged lid, drawn on top of the cat)
+        function drawCrateOverlay(cx, cy, size, layers) {
+            const ctx = game.ctx;
+            const alpha = layers >= 2 ? 0.92 : 0.68;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.translate(cx, cy);
+            ctx.fillStyle = '#b7793f';
+            ctx.fillRect(-size * 0.5, -size * 0.5, size, size);
+            ctx.strokeStyle = '#8a5a26';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-size * 0.5, -size * 0.5, size, size);
+            ctx.beginPath();
+            ctx.moveTo(-size * 0.5, 0);
+            ctx.lineTo(size * 0.5, 0);
+            ctx.moveTo(0, -size * 0.5);
+            ctx.lineTo(0, size * 0.5);
+            ctx.stroke();
+            ctx.fillStyle = '#d99a54';
+            ctx.fillRect(-size * 0.46, -size * 0.3, size * 0.92, size * 0.18);
+            ctx.restore();
+        }
+        
+        // Bomb countdown badge pinned to a tile's corner
+        function drawBombBadge(x, y, s, count) {
+            const ctx = game.ctx;
+            const urgent = count <= 1;
+            const pulse = urgent ? Math.sin(Date.now() / 120) * 2 : 0;
+            const r = s * 0.24 + pulse;
+            ctx.save();
+            ctx.globalAlpha = count <= 1 ? 0.95 : 0.85;
+            ctx.fillStyle = urgent ? '#e74c3c' : '#2c3e50';
+            ctx.beginPath();
+            ctx.arc(x - r, y - r, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${Math.round(r * 1.1)}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(String(count), x - r, y - r + 1);
+            ctx.restore();
         }
         
         function render() {
             const ctx = game.ctx;
             const canvas = game.canvas;
+            const now = Date.now();
+            
+            // The colour cats a level needs matched (photo tiles need a hint)
+            const quotaColor = (game.obj && game.obj.quotaTarget > 0 && game.obj.quotaColor !== null)
+                ? game.obj.quotaColor : -1;
             
             // Scale context for retina displays (all coords stay in CSS pixels)
             ctx.setTransform((game.dpr || 1), 0, 0, (game.dpr || 1), 0, 0);
             ctx.clearRect(0, 0, canvas.width / (game.dpr || 1), canvas.height / (game.dpr || 1));
             
+            // Bomb shake tremor
+            if (now < game.shakeUntil) {
+                const strength = (game.shakeUntil - now) / 220;
+                ctx.translate((Math.random() - 0.5) * 9 * strength, (Math.random() - 0.5) * 9 * strength);
+            }
+            
             // Draw grid background
             const cssWidth = canvas.width / (game.dpr || 1);
+            const cssHeight = canvas.height / (game.dpr || 1);
             ctx.fillStyle = '#f0f0f0';
-            ctx.fillRect(0, 0, cssWidth, cssWidth);
+            ctx.fillRect(-6, -6, cssWidth + 12, cssHeight + 12);
+            
+            // Runner delivery lane below the board
+            if (game.laneH > 0) {
+                ctx.fillStyle = '#fbe3c2';
+                ctx.fillRect(0, cssWidth, cssWidth, game.laneH);
+                ctx.strokeStyle = '#d9a05b';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(0, cssWidth, cssWidth, game.laneH);
+                
+                ctx.font = `${Math.round(game.laneH * 0.8)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#6b4423';
+                const laneY = cssWidth + game.laneH / 2;
+                ctx.fillText('\u{1F6A9}', 16, laneY);
+                ctx.fillText('\u{1F3C1}', cssWidth - 18, laneY);
+                
+                // Lane track
+                ctx.fillStyle = '#8d5a2b';
+                ctx.fillRect(30, laneY - 1.5, cssWidth - 60, 3);
+                
+                // Runner cats
+                game.runners.forEach(runner => {
+                    const xStart = 34, xEnd = cssWidth - 36;
+                    const px = xStart + (runner.steps / runner.maxSteps) * (xEnd - xStart);
+                    const py = laneY;
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(px, py, game.tileSize * 0.34, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = runner.done ? '#2ecc71' : '#bbb';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    drawTileArt(runner.color, px, py, game.tileSize * 0.52, 1);
+                    if (runner.done) {
+                        ctx.font = `12px sans-serif`;
+                        ctx.fillStyle = '#27ae60';
+                        ctx.fillText('\u{2714}', px, py - game.tileSize * 0.42);
+                    }
+                });
+            }
             
             // Draw tiles
             for (let row = 0; row < game.gridSize; row++) {
@@ -2335,16 +3192,85 @@
                         );
                     }
                     
-                    // Draw cat (custom art if loaded, emoji otherwise)
-                    drawTileArt(
-                        tile.type,
-                        tile.x + game.tileSize / 2,
-                        tile.y + game.tileSize / 2,
-                        game.tileSize * 0.6 * tile.scale,
-                        tile.alpha
-                    );
+                    // Frost underlays sit behind the artwork; crates/bombs sit on top
+                    if (tile.ice > 0) {
+                        drawIceOverlay(col * game.tileSize, row * game.tileSize, game.tileSize, tile.ice);
+                    }
+                    
+                    if (tile.rock) {
+                        drawRockSprite(tile.x + game.tileSize / 2, tile.y + game.tileSize / 2, game.tileSize * 0.62);
+                    } else if (tile.ingredient === 1) {
+                        drawIngredientSprite(tile.x + game.tileSize / 2, tile.y + game.tileSize / 2, game.tileSize * 0.58);
+                    } else {
+                        // Draw cat (custom art if loaded, emoji otherwise)
+                        drawTileArt(
+                            tile.type,
+                            tile.x + game.tileSize / 2,
+                            tile.y + game.tileSize / 2,
+                            game.tileSize * 0.6 * tile.scale,
+                            tile.alpha
+                        );
+                        if (tile.crate > 0) {
+                            drawCrateOverlay(tile.x + game.tileSize / 2, tile.y + game.tileSize / 2, game.tileSize * 0.62, tile.crate);
+                        }
+                        if (tile.bomb > 0) {
+                            drawBombBadge(tile.x + game.tileSize, tile.y + game.tileSize, game.tileSize, tile.bomb);
+                        }
+                    }
+                    
+                    // Quota target: ring this colour so it stands out on photo
+                    // tiles (pulses gently so it reads as "collect me")
+                    if (quotaColor >= 0 && tile.type === quotaColor &&
+                        !tile.rock && tile.ingredient !== 1 && tile.ice === 0 && tile.crate === 0) {
+                        const accent = ART_COLORS[tile.type % ART_COLORS.length];
+                        const pulse = 0.5 + 0.5 * Math.sin(now / 300 + tile.type * 1.7);
+                        ctx.strokeStyle = accent;
+                        ctx.lineWidth = 2.5 + pulse * 2;
+                        ctx.strokeRect(
+                            col * game.tileSize + 3,
+                            row * game.tileSize + 3,
+                            game.tileSize - 6,
+                            game.tileSize - 6
+                        );
+                        ctx.fillStyle = accent;
+                        ctx.beginPath();
+                        ctx.arc(col * game.tileSize + 9, row * game.tileSize + 9, 3 + pulse * 1.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
                 }
             }
+            
+            // Exit-column delivery markers along the bottom row
+            (game.obj && game.obj.exits || []).forEach(col => {
+                const bx = col * game.tileSize + game.tileSize / 2;
+                const by = cssWidth - 3;
+                ctx.fillStyle = '#f1c40f';
+                ctx.beginPath();
+                ctx.moveTo(bx - game.tileSize * 0.13, by - 2);
+                ctx.lineTo(bx + game.tileSize * 0.13, by - 2);
+                ctx.lineTo(bx, by + 4);
+                ctx.closePath();
+                ctx.fill();
+            });
+            
+            // Baby riders (drawn above their tiles, gently bobbing)
+            const bob = now / 260;
+            game.babies.forEach(baby => {
+                if (baby.done) return;
+                const cx = baby.col * game.tileSize + game.tileSize / 2;
+                const cy = (baby.row + 1) * game.tileSize - game.tileSize * 0.16 -
+                    Math.abs(Math.sin(bob + baby.col * 0.8)) * game.tileSize * 0.06;
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(cx, cy - game.tileSize * 0.22, game.tileSize * 0.12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ff6b81';
+                ctx.font = `${Math.round(game.tileSize * 0.16)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('\u{2764}', cx, cy - game.tileSize * 0.22);
+                drawTileArt(baby.color, cx, cy, game.tileSize * 0.55, 1);
+            });
             
             // Draw particles
             game.particles.forEach(p => {
