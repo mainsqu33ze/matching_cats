@@ -17,12 +17,13 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            min-height: 100dvh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             padding: 10px;
-            overflow: hidden;
+            overflow-y: auto;
         }
         
         .game-container {
@@ -30,25 +31,33 @@
             background: white;
             border-radius: 20px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            padding: 20px;
+            padding: 16px;
             max-width: 400px;
             width: 100%;
         }
         
         .header {
             text-align: center;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
         
         .header h1 {
-            font-size: 1.8em;
+            font-size: 1.6em;
             color: #764ba2;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
         }
         
         .header .subtitle {
-            font-size: 0.9em;
+            font-size: 0.85em;
             color: #666;
+            max-height: 2em;
+            overflow: hidden;
+            transition: opacity 0.5s ease, max-height 0.5s ease, margin 0.5s ease;
+        }
+        
+        .header .subtitle.fading {
+            opacity: 0;
+            max-height: 0;
         }
         
         .stats-bar {
@@ -141,8 +150,19 @@
         }
         
         .level-progress {
-            margin-top: 15px;
+            margin-top: 12px;
             text-align: center;
+        }
+        
+        .footer-btns {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        
+        .footer-btns .btn {
+            margin-top: 0;
+            flex: 1;
         }
         
         .progress-bar {
@@ -215,14 +235,14 @@
             50% { opacity: 0.5; }
         }
         
-        .level-code {
+        .save-code-line {
             text-align: center;
             font-size: 0.85em;
             color: #666;
-            margin: -5px 0 10px;
+            margin: 0 0 10px;
         }
         
-        .level-code .code-val {
+        .save-code-line .code-val {
             font-weight: bold;
             letter-spacing: 2px;
             color: #d35400;
@@ -449,6 +469,47 @@
         .instructions li {
             margin-bottom: 5px;
         }
+        
+        /* Tight phones (small height): shrink the chrome so the board + progress
+           bar always fit on screen at once */
+        @media (max-height: 780px) {
+            .game-container {
+                padding: 12px;
+            }
+            .header {
+                margin-bottom: 8px;
+            }
+            .header h1 {
+                font-size: 1.3em;
+            }
+            .stats-bar {
+                padding: 7px;
+                margin-bottom: 8px;
+            }
+            .stat-value {
+                font-size: 1.1em;
+            }
+            .powers-bar {
+                margin-bottom: 8px;
+                gap: 8px;
+            }
+            .power-btn {
+                padding: 6px 10px;
+                font-size: 0.82em;
+            }
+            .level-progress {
+                margin-top: 8px;
+            }
+            .progress-bar {
+                margin-top: 5px;
+            }
+            #objChips:not(:empty) {
+                padding: 3px 6px;
+            }
+            .footer-btns {
+                margin-top: 8px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -479,8 +540,6 @@
         
         <div class="boss-banner" id="bossBanner"></div>
         
-        <div class="level-code" id="levelCode"></div>
-        
         <div class="powers-bar" id="powersBar">
             <button class="power-btn" id="boxPowerBtn" disabled>&#128230; Box <span class="power-count" id="boxCount">0</span></button>
             <button class="power-btn" id="tunaPowerBtn" disabled>&#127843; Tuna <span class="power-count" id="tunaCount">0</span></button>
@@ -500,7 +559,10 @@
             <div id="objChips"></div>
         </div>
         
-        <button class="btn" id="newGameBtn">New Game</button>
+        <div class="footer-btns">
+            <button class="btn" id="newGameBtn">New Game</button>
+            <button class="btn ghost" id="exitBtn" type="button">Exit</button>
+        </div>
     </div>
     
     <div class="overlay" id="welcomeOverlay">
@@ -567,7 +629,9 @@
                 <div class="stat-label">Total Points</div>
                 <div class="stat-value" id="finalTotal" style="color: #764ba2;">0</div>
             </div>
+            <div class="save-code-line">Your save spot &#9889; <span class="code-val" id="completeCode"></span></div>
             <button class="btn" id="nextLevelBtn">Next Level</button>
+            <button class="btn ghost" id="exitToMenuBtn" type="button">Exit to Menu</button>
         </div>
     </div>
     
@@ -891,13 +955,24 @@
         
         function setupCanvas() {
             const container = document.querySelector('.game-container');
-            // Size canvas to fit both width and available height (mobile-friendly)
-            const maxWidth = Math.min(container.clientWidth - 40, 380);
-            const headerH = 90, statsH = 55, progressH = 45, buttonH = 50;
-            const containerTop = (container.getBoundingClientRect && container.getBoundingClientRect().top) || 0;
-            const availHeight = window.innerHeight - containerTop - headerH - statsH - progressH - buttonH - 30;
-            const maxWidthFinal = Math.max(220, Math.min(maxWidth, availHeight));
+            // Size canvas to fit both width and the vertical space that is actually
+            // left over after the real header/stats/powers/progress chrome, so the
+            // whole board (and whats under it) stays on screen even on small phones
+            const maxWidth = Math.min(container.clientWidth - 30, 380);
             const dpr = window.devicePixelRatio || 1;
+            
+            const heightOf = (sel) => {
+                const el = document.querySelector(sel);
+                const r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+                return r ? r.height : 0;
+            };
+            const chromeTop = heightOf('.header') + heightOf('.stats-bar') +
+                heightOf('#bossBanner') + heightOf('#powersBar');
+            const chromeBottom = heightOf('.level-progress') + heightOf('.footer-btns');
+            const containerTop = (container.getBoundingClientRect && container.getBoundingClientRect().top) || 0;
+            const availHeight = Math.max(180, (window.innerHeight || 800) - containerTop - chromeTop - chromeBottom - 24);
+            
+            const maxWidthFinal = Math.max(200, Math.min(maxWidth, availHeight));
             
             // Internal resolution scaled for retina displays
             game.laneH = levelHasRunner() ? 30 : 0;
@@ -912,6 +987,20 @@
             
             game.tileSize = maxWidthFinal / game.gridSize;
             game.dpr = dpr;
+            
+            // Re-base any existing tiles to the new cell size
+            if (game.grid && game.grid.length > 0) {
+                for (let r = 0; r < game.grid.length; r++) {
+                    if (!game.grid[r]) continue;
+                    for (let c = 0; c < game.grid[r].length; c++) {
+                        const t = game.grid[r][c];
+                        if (t) {
+                            t.x = c * game.tileSize;
+                            t.y = r * game.tileSize;
+                        }
+                    }
+                }
+            }
         }
         
         // Whether the current level has a runner/courier objective (which adds a
@@ -935,20 +1024,11 @@
             game.reel = null;
             game.effects = [];
             
-            setupCanvas();
-            generateGrid(config.numCatTypes);
-            removeInitialMatches(config.numCatTypes);
-            applyLevelDecor(config);
-            ensureQuotaSupply();
-            
-            updateUI();
-            updatePowerUI();
-            updateBossBanner();
-            updateLevelCode();
-            if (!game.suppressSave) saveProgress();
-            
-            document.getElementById('levelDisplay').textContent = level;
+            // Flash the level title, then fade it away - the stats bar already
+            // tracks level/score/moves/goal so the header stays compact
             const subtitle = document.querySelector('.header .subtitle');
+            clearTimeout(game.subtitleTimer);
+            subtitle.classList.remove('fading');
             if (level === 29) {
                 subtitle.textContent = `\u{1F479} FINAL BOSS: ${config.name}`;
                 subtitle.style.color = '#c0392b';
@@ -958,14 +1038,32 @@
                 subtitle.style.color = '';
                 subtitle.style.fontWeight = '';
             }
+            game.subtitleTimer = setTimeout(() => subtitle.classList.add('fading'), 2600);
+            
+            updateBossBanner();
+            
+            generateGrid(config.numCatTypes);
+            removeInitialMatches(config.numCatTypes);
+            applyLevelDecor(config);
+            ensureQuotaSupply();
+            
+            updateUI();
+            updatePowerUI();
+            
+            // Measure the chrome AFTER titles/chips/powers are populated so the
+            // canvas shrinks to whatever vertical space is truly left
+            setupCanvas();
+            render();
+            
+            if (!game.suppressSave) saveProgress();
+            
+            document.getElementById('levelDisplay').textContent = level;
             document.getElementById('nextLevelBtn').textContent = 'Next Level';
             document.getElementById('nextLevelBtn').onclick = () => {
                 document.getElementById('levelCompleteOverlay').classList.add('hidden');
                 game.currentLevel = Math.min(game.currentLevel + 1, 29);
                 loadLevel(game.currentLevel);
             };
-            
-            render();
         }
         
         // Scatter the current level's blockers, bombs, ingredients, babies and runner
@@ -1215,6 +1313,20 @@
                 game.totalScore = 0;
                 resetPowers();
                 loadLevel(1);
+            });
+            
+            // Exit back to the menu: prefill the welcome screen's code box with
+            // the current save spot so it is easy to write down and return later
+            const goToMenu = () => {
+                const code = makeLevelCode();
+                document.getElementById('codeInput').value = `${code.slice(0, 2)}-${code.slice(2)}`;
+                document.getElementById('codeErr').textContent = '';
+                document.getElementById('welcomeOverlay').classList.remove('hidden');
+            };
+            document.getElementById('exitBtn').addEventListener('click', goToMenu);
+            document.getElementById('exitToMenuBtn').addEventListener('click', () => {
+                document.getElementById('levelCompleteOverlay').classList.add('hidden');
+                goToMenu();
             });
             
             document.getElementById('retryBtn').addEventListener('click', () => {
@@ -1529,12 +1641,6 @@
             const level = parseInt(code.slice(0, 2), 10);
             if (level < 1 || level > 29) return null;
             return { level: level, total: parseInt(code.slice(2), 10) };
-        }
-        
-        function updateLevelCode() {
-            const el = document.getElementById('levelCode');
-            const code = makeLevelCode();
-            el.innerHTML = `Save spot \u{26A1} <span class="code-val">${code.slice(0,2)}-${code.slice(2)}</span> write it down to return later`;
         }
         
         function saveProgress() {
@@ -2949,6 +3055,13 @@
             }
             
             score.textContent = game.score;
+            
+            // Show the save spot so it never gets lost (the total only updates
+            // once this level is cleared, so the code is final for this spot)
+            const code = makeLevelCode();
+            const completeCode = document.getElementById('completeCode');
+            if (completeCode) completeCode.textContent = `${code.slice(0, 2)}-${code.slice(2)}`;
+            
             overlay.classList.remove('hidden');
         }
         
