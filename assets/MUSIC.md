@@ -1,9 +1,9 @@
-# Changing the background music
+# Changing the music and sound effects
 
-The music is **synthesised in the browser** with the Web Audio API — there is no
-audio file. Nothing to download, nothing to cache, and it cannot 404. The whole
-engine is one section in `index.html`, under the `// ---- BACKGROUND MUSIC ----`
-comment near the top of the `<script>` block.
+The music and the sound effects are both **synthesised in the browser** with the
+Web Audio API — there is no audio file. Nothing to download, nothing to cache,
+and it cannot 404. The whole engine is one section in `index.html`, under the
+`// ---- BACKGROUND MUSIC ----` comment near the top of the `<script>` block.
 
 You do not need this file if you only want a different tune: the melody and bass
 arrays are the only things you need to touch, and they explain themselves inline.
@@ -16,6 +16,8 @@ arrays are the only things you need to touch, and they explain themselves inline
 | The tempo             | `MUSIC_STEP`                | music section header   |
 | The key               | add an offset in the arrays | `scheduleStep()`       |
 | Use a real audio file | see "Using a real audio file" below | `startMusic()` / `stopMusic()` |
+
+The sound effects are covered in [Sound effects](#sound-effects) at the end.
 
 ## 1. Changing the tune
 
@@ -171,6 +173,74 @@ sound is produced. It carries over to a file-based track unchanged:
 - pausing when the tab is hidden, resuming when it returns
 - the greyed-out "muted" button state and its `aria-pressed` / `aria-label`
 
+## Sound effects
+
+Gameplay sounds are short one-shots, generated the same way as the music. They
+share the on/off preference and the toggle button, so the ♪ button silences
+everything — there is only one audio preference, kept in `localStorage` under
+`meowMatchMusic`.
+
+| Effect          | Function        | Where it fires         | What it is                                |
+| --------------- | --------------- | ---------------------- | ----------------------------------------- |
+| Match           | `sfxMatch()`    | `processMatches()`     | Two bright tones, climbing with the combo |
+| Board refilled  | `sfxRefill()`   | `fillEmptySpaces()`    | Soft plink plus a noise burst             |
+| Illegal swap    | `sfxInvalid()`  | `selectAndSwap()`      | One low muted thud                        |
+| Game over       | `sfxGameOver()` | `showGameOver()`       | Descending D-minor phrase, music stopped  |
+
+`sfxStopGameOver()` cuts the game-over phrase short when you retry, exit or
+start a new game.
+
+Each one takes plain arguments, so retuning is just a number change:
+
+```js
+sfxTone(midi, durationSeconds, waveform, volume, startTime, bus);
+sfxNoise(durationSeconds, volume, filterHz, startTime, bus);
+```
+
+Waveforms are the normal `'sine'`, `'triangle'`, `'square'`, `'sawtooth'`.
+`midi` uses the same note-number chart as the melody above.
+
+### Three audio buses
+
+Sound is split across three gain nodes, which is what lets you change levels
+without hunting through the effects:
+
+| Bus             | Level | Carries                            |
+| --------------- | ----- | ---------------------------------- |
+| `music.master`  | 0.16  | the looping melody and bass        |
+| `music.sfxGain` | 0.55  | gameplay effects                   |
+| `music.jingleGain` | 0.5 | the game-over phrase, only         |
+
+The game-over phrase is on its own bus on purpose: `sfxStopGameOver()` can fade
+it out in one move without silencing the match and refill sounds, which would be
+audible if the player hit Try Again mid-cascade.
+
+### Retuning an effect
+
+To make the match sound brighter, raise its starting note in `sfxMatch()`:
+
+```js
+const base = 79 + step;              // G5 and up, one step per combo
+```
+
+Higher numbers are higher pitches; `step` caps at 7 so a long combo climbs
+rather than running off into a whistle.
+
+To make the refill quieter, lower the `vol` arguments in `sfxRefill()` — they
+are currently `0.16` and `0.1` for the two tones, and `0.1` for the noise burst.
+
+To retune the game-over descent, edit the five `sfxTone()` calls in
+`sfxGameOver()`. They are D5 → C5 → B♭4 → A4 followed by a held low D2, each with
+a `when` offset that sets the spacing between notes.
+
+### Burst protection
+
+`sfxThrottled(minGapMs)` is called first in each effect. A cascade can fire
+several matches in a few frames, and without this they would stack and clip.
+The gaps are 40ms for matches, 70ms for refills and 90ms for the invalid thud.
+If a sound feels like it is being swallowed, that gap is the first thing to
+lower.
+
 ## Testing your changes
 
 The music engine is covered by a test that stubs `AudioContext` and checks the
@@ -179,12 +249,21 @@ note scheduling without needing speakers. It verifies the graph builds, a full
 counter wraps rather than drifting off the end of the arrays, and turning the
 music off clears the timer and stops every oscillator.
 
+The sound effects have two more:
+
 ```sh
-node test_music.cjs        # from wherever the test files live
+node test_music.cjs         # the looping background music
+node test_sfx.cjs           # each effect in isolation
+node test_sfx_wiring.cjs    # plays real moves and checks they actually fire
 ```
 
-If you change `MELODY` or `BASS_ROOTS`, update the expected pitch set in that
-test, or it will correctly fail and tell you the tune changed.
+`test_sfx_wiring.cjs` is the one that catches a forgotten hook: it plays genuine
+matching moves, an illegal swap and an exhausted move counter, and counts the
+notes that come out the other end. If you move a call to a different function,
+that test will tell you the sound stopped firing.
+
+If you change `MELODY` or `BASS_ROOTS`, update the expected pitch set in
+`test_music.cjs`, or it will correctly fail and tell you the tune changed.
 
 ## One caveat
 

@@ -1045,6 +1045,9 @@
         //   - Real audio file instead: see assets/MUSIC.md. The toggle, the
         //     saved preference and the tab-visibility pause are all in
         //     setMusicEnabled()/updateMusicBtn() and carry over unchanged.
+        //
+        // Sound effects (match, refill, game over) are just below this, under
+        // the "SOUND EFFECTS" comment. They share the one on/off preference.
         const MUSIC_PREF_KEY = 'meowMatchMusic';
         const MUSIC_STEP = 0.3;          // one eighth note at 100 BPM
         const MUSIC_STEPS = 32;          // 4 bars of 8 eighth notes
@@ -1053,9 +1056,12 @@
             enabled: true,
             ctx: null,
             master: null,
+            sfxGain: null,
+            jingleGain: null,
             timer: null,
             step: 0,
-            nextTime: 0
+            nextTime: 0,
+            lastSfxAt: 0
         };
 
         function loadMusicPref() {
@@ -1089,6 +1095,17 @@
                 music.master.gain.value = 0;
                 music.master.connect(music.ctx.destination);
 
+                // Effects bypass the music delay so they stay crisp and punchy
+                music.sfxGain = music.ctx.createGain();
+                music.sfxGain.gain.value = 0.55;
+                music.sfxGain.connect(music.ctx.destination);
+
+                // The game-over sting gets its own bus so it can be cut off in
+                // one move without silencing gameplay effects at the same time
+                music.jingleGain = music.ctx.createGain();
+                music.jingleGain.gain.value = 0.5;
+                music.jingleGain.connect(music.ctx.destination);
+
                 // Soft feedback delay for a bit of room around the melody
                 const delay = music.ctx.createDelay(1);
                 const feedback = music.ctx.createGain();
@@ -1105,6 +1122,132 @@
                 music.ctx = null;
             }
             return music.ctx;
+        }
+
+        // ---- SOUND EFFECTS ----
+        // Short one-shots for gameplay events, plus a short game-over phrase.
+        // They all honour the same on/off preference as the music.
+        // See assets/MUSIC.md for how to retune any of these.
+
+        // Guard against a burst of effects stacking on top of each other and
+        // clipping (a fast cascade can fire several in a few frames).
+        function sfxThrottled(minGapMs) {
+            if (!music.enabled) return true;
+            const now = Date.now();
+            if (music.lastSfxAt && now - music.lastSfxAt < minGapMs) return true;
+            music.lastSfxAt = now;
+            return false;
+        }
+
+        // A single short tone on an effects bus
+        function sfxTone(midi, dur, type, vol, when, bus) {
+            const ctx = music.ctx;
+            const out = bus || music.sfxGain;
+            if (!ctx || !out) return;
+            const t = when || ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = type || 'sine';
+            osc.frequency.value = noteFreq(midi);
+            gain.gain.setValueAtTime(0.0001, t);
+            gain.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            osc.connect(gain);
+            gain.connect(out);
+            osc.start(t);
+            osc.stop(t + dur + 0.02);
+        }
+
+        // A filtered noise burst, for the "stuff moving" sounds
+        function sfxNoise(dur, vol, freq, when, bus) {
+            const ctx = music.ctx;
+            const out = bus || music.sfxGain;
+            if (!ctx || !out) return;
+            const t = when || ctx.currentTime;
+            const frames = Math.max(1, Math.floor(ctx.sampleRate * dur));
+            const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < frames; i++) {
+                data[i] = (Math.random() * 2 - 1) * (1 - i / frames);
+            }
+            const src = ctx.createBufferSource();
+            src.buffer = buffer;
+            const filter = ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = freq;
+            const gain = ctx.createGain();
+            gain.gain.setValueAtTime(vol, t);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            src.connect(filter);
+            filter.connect(gain);
+            gain.connect(out);
+            src.start(t);
+            src.stop(t + dur + 0.02);
+        }
+
+        // A match: a bright two-note "ping" that climbs with the combo, so
+        // chains of matches sound like they are building.
+        function sfxMatch(combo) {
+            if (sfxThrottled(40)) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            const step = Math.min(Math.max((combo || 1) - 1, 0), 7);
+            const base = 79 + step;              // G5 and up, one step per combo
+            const t = ctx.currentTime;
+            sfxTone(base, 0.16, 'triangle', 0.32, t);
+            sfxTone(base + 7, 0.13, 'sine', 0.18, t + 0.045);
+        }
+
+        // The board being repopulated: a soft downward "plink" as cats drop in
+        function sfxRefill() {
+            if (sfxThrottled(70)) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            const t = ctx.currentTime;
+            sfxNoise(0.1, 0.1, 1400, t);
+            sfxTone(72, 0.16, 'sine', 0.16, t + 0.02);
+            sfxTone(67, 0.14, 'sine', 0.1, t + 0.07);
+        }
+
+        // A blocked/invalid move: a short muted thud
+        function sfxInvalid() {
+            if (sfxThrottled(90)) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            sfxTone(45, 0.11, 'square', 0.1, ctx.currentTime);
+        }
+
+        // Game over: a short descending minor phrase, then silence. Stops the
+        // looping music first so it does not fight the sting.
+        function sfxGameOver() {
+            if (!music.enabled) return;
+            const ctx = ensureAudio();
+            if (!ctx) return;
+            stopMusic();
+            const bus = music.jingleGain;
+            if (!bus) return;
+            // Reset the bus so a cut-off sting from a previous life cannot
+            // leave it muted
+            bus.gain.cancelScheduledValues(ctx.currentTime);
+            bus.gain.value = 0.5;
+            const t = ctx.currentTime + 0.12;
+            // D minor: D5, C5, Bb4, A4 - the classic "sad game over" descent
+            sfxTone(74, 0.42, 'triangle', 0.3, t, bus);
+            sfxTone(72, 0.42, 'triangle', 0.3, t + 0.34, bus);
+            sfxTone(70, 0.46, 'triangle', 0.3, t + 0.68, bus);
+            sfxTone(69, 0.9, 'triangle', 0.32, t + 1.04, bus);
+            sfxTone(62, 1.1, 'sine', 0.22, t + 1.06, bus);
+        }
+
+        // Cut the game-over sting off short (retry, exit, new game). Ramping the
+        // jingle bus silences the scheduled notes without touching gameplay SFX.
+        function sfxStopGameOver() {
+            const ctx = music.ctx;
+            if (!ctx || !music.jingleGain) return;
+            const t = ctx.currentTime;
+            music.jingleGain.gain.cancelScheduledValues(t);
+            music.jingleGain.gain.setValueAtTime(music.jingleGain.gain.value, t);
+            music.jingleGain.gain.linearRampToValueAtTime(0, t + 0.12);
         }
 
         function playNote(midi, time, dur, type, vol) {
@@ -1637,6 +1780,7 @@
             });
             
             document.getElementById('newGameBtn').addEventListener('click', () => {
+                sfxStopGameOver();
                 game.currentLevel = 1;
                 game.totalScore = 0;
                 resetPowers();
@@ -1646,6 +1790,7 @@
             // Exit back to the menu: prefill the welcome screen's code box with
             // the current save spot so it is easy to write down and return later
             const goToMenu = () => {
+                sfxStopGameOver();
                 const code = makeLevelCode();
                 document.getElementById('codeInput').value = `${code.slice(0, 2)}-${code.slice(2)}`;
                 document.getElementById('codeErr').textContent = '';
@@ -1659,6 +1804,9 @@
             
             document.getElementById('retryBtn').addEventListener('click', () => {
                 document.getElementById('gameOverOverlay').classList.add('hidden');
+                // Cut the game-over sting off and hand the music back
+                sfxStopGameOver();
+                if (music.enabled) startMusic();
                 loadLevel(game.currentLevel);
             });
             
@@ -1928,6 +2076,8 @@
             } else {
                 await animateSwap(row1, col1, row2, col2);
                 swapTiles(row1, col1, row2, col2);
+                // No match resulted: a muted thud so the swap doesn't feel dead
+                sfxInvalid();
             }
             
             game.isAnimating = false;
@@ -2762,6 +2912,9 @@
                 showComboPopup('Combos x' + game.comboMultiplier + '!');
             }
             
+            // Match sound: pitch climbs with the combo multiplier
+            sfxMatch(game.comboMultiplier);
+            
             // Award power-ups from match groups (cascades qualify too)
             if (!awardsDisabled && groups && game.levelConfigs[game.currentLevel - 1].hasSpecials) {
                 groups.forEach(g => {
@@ -2865,6 +3018,8 @@
             }
             
             if (hasEmpty) {
+                // Board repopulating: a soft plink as the new cats drop in
+                sfxRefill();
                 await animateDropIn();
             }
         }
@@ -3492,6 +3647,8 @@
         
         function showGameOver() {
             document.getElementById('gameOverOverlay').classList.remove('hidden');
+            // Short descending sting, in place of the background music
+            sfxGameOver();
             const p = document.querySelector('#gameOverOverlay p');
             const remaining = objectiveReport();
             if (p) {
