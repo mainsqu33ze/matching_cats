@@ -295,6 +295,37 @@
             animation: slotFlash 1.2s ease-out forwards;
         }
         
+        .board-notice {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 94%;
+            padding: 9px 13px;
+            border-radius: 12px;
+            background: rgba(118, 75, 162, 0.95);
+            color: white;
+            font-size: 0.78em;
+            font-weight: 600;
+            line-height: 1.4;
+            text-align: center;
+            box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+            opacity: 0;
+            z-index: 12;
+        }
+        
+        .board-notice.show {
+            animation: boardNotice 4.2s ease forwards;
+        }
+        
+        @keyframes boardNotice {
+            0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+            7%   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            82%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -62%) scale(1); }
+        }
+        
         @keyframes slotFlash {
             0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
             20%  { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
@@ -550,6 +581,7 @@
         <canvas id="gameCanvas"></canvas>
         <div class="combo-popup" id="comboPopup"></div>
         <div class="slot-flash" id="slotFlash"></div>
+        <div class="board-notice" id="boardNotice"></div>
         
         <div class="level-progress">
             <span id="progressText">0% to next level</span>
@@ -1053,7 +1085,16 @@
             // Measure the chrome AFTER titles/chips/powers are populated so the
             // canvas shrinks to whatever vertical space is truly left
             setupCanvas();
+            
+            // Never start a level on a board that can't be matched (a fresh
+            // board with lots of blockers can come out with almost no legal swap)
+            if (ensurePlayableBoard(2, false)) render();
             render();
+            
+            // Explain anything new this level introduces
+            if (NEW_ELEMENT_NOTES[level]) {
+                setTimeout(() => showBoardNotice(NEW_ELEMENT_NOTES[level]), 1100);
+            }
             
             if (!game.suppressSave) saveProgress();
             
@@ -1107,6 +1148,7 @@
             
             // Lexical free-cells helper (excludes blockers, food, and other spawns)
             const freeCells = (opts) => {
+                const exits = (game.obj && game.obj.exits) || [];
                 const arr = [];
                 for (let r = 0; r < game.gridSize; r++) {
                     for (let c = 0; c < game.gridSize; c++) {
@@ -1115,16 +1157,23 @@
                         if (t.ice > 0 || t.crate > 0 || t.rock) continue;
                         if (t.ingredient === 1) continue;
                         if (opts && opts.noBottomRow && r === game.gridSize - 1) continue;
+                        // Delivery lanes must stay open: a blocker on the lane
+                        // floor traps a parcel above it forever, and a parcel can
+                        // only leave through the bottom row
+                        if (opts && exits.indexOf(c) !== -1) {
+                            if (opts.noLaneFloor && r === game.gridSize - 1) continue;
+                            if (opts.noLaneAtAll) continue;
+                        }
                         arr.push({ row: r, col: c });
                     }
                 }
                 return arr;
             };
             
-            const placeRandom = (count, pick) => {
+            const placeRandom = (count, pick, opts) => {
                 let placed = 0;
                 while (placed < count) {
-                    const arr = freeCells({ noBottomRow: false });
+                    const arr = freeCells(opts);
                     if (!arr.length) break;
                     const chosen = arr[Math.floor(Math.random() * arr.length)];
                     pick(chosen.row, chosen.col, placed);
@@ -1135,16 +1184,18 @@
             
             placeRandom(config.ice || 0, (r, c) => {
                 game.grid[r][c].ice = 1 + Math.floor(Math.random() * 2);
-            });
+            }, { noLaneFloor: true });
             placeRandom(config.crate || 0, (r, c) => {
                 game.grid[r][c].crate = 1 + Math.floor(Math.random() * 2);
-            });
+            }, { noLaneFloor: true });
+            // Rocks need a power or a bomb to break, so they never sit in a
+            // delivery lane at all - that would make the level unwinnable
             placeRandom(config.rock || 0, (r, c) => {
                 game.grid[r][c].rock = 1;
-            });
+            }, { noLaneAtAll: true });
             placeRandom(config.bombs || 0, (r, c) => {
                 game.grid[r][c].bomb = config.bombTicks || 4;
-            });
+            }, { noLaneFloor: true });
             
             // Delivery ingredients (in earlier rows of the exit columns)
             if (deco.ingredients) {
@@ -2219,14 +2270,14 @@
             return n;
         }
         
-        // Delivery ingredients drop off the bottom row's exit columns
+        // Delivery parcels drop off the bottom row. Any column works - the exit
+        // columns are only the highlighted guide lane - so a parcel nudged out
+        // of the lane still gets delivered instead of sitting there forever.
         function collectIngredients() {
-            const exits = (game.obj && game.obj.exits) || [];
             let collected = 0;
-            const exitCols = new Set(exits);
+            const lastRow = game.gridSize - 1;
             for (let col = 0; col < game.gridSize; col++) {
-                if (!exitCols.has(col)) continue;
-                const t = game.grid[game.gridSize - 1][col];
+                const t = game.grid[lastRow][col];
                 if (t && t.ingredient === 1) {
                     t.type = -1;
                     t.ingredient = 0;
@@ -2237,7 +2288,7 @@
                     game.score += 250;
                     createParticles(
                         col * game.tileSize + game.tileSize / 2,
-                        (game.gridSize - 1) * game.tileSize + game.tileSize / 2,
+                        lastRow * game.tileSize + game.tileSize / 2,
                         '\u{1F48E}',
                         -2
                     );
@@ -2327,6 +2378,8 @@
                 explodeBombs(dead);
                 await settleBoard();
             }
+            // Rescuing a dead board mid-level keeps the game playable
+            if (ensurePlayableBoard(1, true)) render();
             updateUI();
             checkGameState();
         }
@@ -2344,6 +2397,66 @@
                 await fillEmptySpaces();
                 updateUI();
             }
+        }
+        
+        // Count the swaps that would currently make a match. Blocked cells and parcels
+        // are skipped: those are not things the player can swap with a neighbour.
+        function countPossibleMoves() {
+            let moves = 0;
+            for (let r = 0; r < game.gridSize; r++) {
+                for (let c = 0; c < game.gridSize; c++) {
+                    for (let d = 0; d < 2; d++) {
+                        const r2 = r + (d ? 1 : 0);
+                        const c2 = c + (d ? 0 : 1);
+                        if (r2 >= game.gridSize || c2 >= game.gridSize) continue;
+                        const a = game.grid[r][c];
+                        const b = game.grid[r2][c2];
+                        if (!a || !b || a.type < 0 || b.type < 0) continue;
+                        if (a.ice || a.crate || a.rock || b.ice || b.crate || b.rock) continue;
+                        const swap = a.type;
+                        a.type = b.type;
+                        b.type = swap;
+                        const matched = findMatches().length > 0;
+                        const back = a.type;
+                        a.type = b.type;
+                        b.type = back;
+                        if (matched) moves++;
+                    }
+                }
+            }
+            return moves;
+        }
+        
+        // Re-roll the cat colours in place. Decor (ice/crate/rock/bombs), parcels,
+        // babies, runners and objective progress all stay exactly where they are.
+        function reshuffleBoard() {
+            const config = game.levelConfigs[game.currentLevel - 1];
+            for (let r = 0; r < game.gridSize; r++) {
+                for (let c = 0; c < game.gridSize; c++) {
+                    const t = game.grid[r][c];
+                    if (t.type >= 0) t.type = Math.floor(Math.random() * config.numCatTypes);
+                }
+            }
+            removeInitialMatches(config.numCatTypes);
+            ensureQuotaSupply();
+        }
+        
+        // A level must never hand the player a board where nothing can be matched:
+        // a blocked/iced board can be so constrained that no swap makes a match,
+        // which reads as the game being broken until a power-up reshuffles it.
+        // requireMore = how many legal swaps we insist on before loading a level.
+        function ensurePlayableBoard(requireMore, announce) {
+            const needed = requireMore || 1;
+            let reshuffled = false;
+            for (let attempt = 0; attempt < 15; attempt++) {
+                if (countPossibleMoves() >= needed) break;
+                reshuffleBoard();
+                reshuffled = true;
+            }
+            if (reshuffled && announce) {
+                showBoardNotice('\u{1F504} No matching moves left - reshuffling the cats!');
+            }
+            return reshuffled;
         }
         
         // Whether every objective of the current level is fulfilled
@@ -3094,6 +3207,32 @@
             void flash.offsetWidth;
             flash.classList.add('show');
         }
+        
+        // Temporary message over the board (new-mechanic explainers, reshuffles)
+        function showBoardNotice(text) {
+            const notice = document.getElementById('boardNotice');
+            if (!notice) return;
+            notice.textContent = text;
+            notice.classList.remove('show');
+            void notice.offsetWidth;   // restart the animation
+            notice.classList.add('show');
+            clearTimeout(game.noticeTimer);
+            game.noticeTimer = setTimeout(() => notice.classList.remove('show'), 4300);
+        }
+        
+        // Shown the first time each new mechanic appears, so a level that adds
+        // something new explains it instead of leaving the player guessing
+        const NEW_ELEMENT_NOTES = {
+            8:  '\u{1F9CA} NEW - ICE! Match a line of cats beside a frosted tile to chip the ice away.',
+            10: 'NEW - QUOTA! The color with the pulsing ring is this level\u2019s quota. Keep matching it until the counter fills.',
+            12: '\u{1F4E6} NEW - CRATES! Match right next to a crate to crack it open.',
+            14: '\u{1F4A3} NEW - COUNTDOWN BOMBS! The number counts the turns until it explodes and blows up the tiles around it. Match the bomb to defuse it.',
+            15: 'NEW - CLEAR EVERY BLOCKER! All the ice, crates and rocks must be gone to clear the level.',
+            17: '\u{1FAA8} NEW - ROCKS! Only a power blast or a bomb can break a rock.',
+            18: '\u{1F48E} NEW - DELIVERIES! Clear the cats under a parcel and it drops off the bottom of the board.',
+            21: '\u{1F63D} NEW - BABY CATS! Match their color in their row or column to hop them down to safety.',
+            25: '\u{1F3C1} NEW - RUNNER! Match the runner\u2019s color to sprint it along the lane to the finish.'
+        };
         
         function updateUI() {
             document.getElementById('scoreDisplay').textContent = game.score;
