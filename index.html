@@ -1714,13 +1714,9 @@
                         if (t.ice > 0 || t.crate > 0 || t.rock) continue;
                         if (t.ingredient === 1) continue;
                         if (opts && opts.noBottomRow && r === game.gridSize - 1) continue;
-                        // Delivery lanes must stay open: a blocker on the lane
-                        // floor traps a parcel above it forever, and a parcel can
-                        // only leave through the bottom row
-                        if (opts && exits.indexOf(c) !== -1) {
-                            if (opts.noLaneFloor && r === game.gridSize - 1) continue;
-                            if (opts.noLaneAtAll) continue;
-                        }
+                        // Delivery lanes stay clear so a parcel always has a
+                        // path to the bottom row
+                        if (opts && exits.indexOf(c) !== -1 && opts.noLaneAtAll) continue;
                         arr.push({ row: r, col: c });
                     }
                 }
@@ -1739,20 +1735,25 @@
                 return placed;
             };
             
+            // Blockers never spawn inside a delivery lane, at any row. A parcel
+            // can only leave through the bottom row, so one of these anywhere
+            // in the lane parks the parcel above it until the blocker is
+            // chipped away - and on a crate-and-delivery level that can eat
+            // the whole move budget and make the level unwinnable. Ice and
+            // crates are placed elsewhere, and so are rocks, which additionally
+            // need a power or a bomb.
             placeRandom(config.ice || 0, (r, c) => {
                 game.grid[r][c].ice = 1 + Math.floor(Math.random() * 2);
-            }, { noLaneFloor: true });
+            }, { noLaneAtAll: true });
             placeRandom(config.crate || 0, (r, c) => {
                 game.grid[r][c].crate = 1 + Math.floor(Math.random() * 2);
-            }, { noLaneFloor: true });
-            // Rocks need a power or a bomb to break, so they never sit in a
-            // delivery lane at all - that would make the level unwinnable
+            }, { noLaneAtAll: true });
             placeRandom(config.rock || 0, (r, c) => {
                 game.grid[r][c].rock = 1;
             }, { noLaneAtAll: true });
             placeRandom(config.bombs || 0, (r, c) => {
                 game.grid[r][c].bomb = config.bombTicks || 4;
-            }, { noLaneFloor: true });
+            }, { noLaneAtAll: true });
             
             // Delivery ingredients (in earlier rows of the exit columns)
             if (deco.ingredients) {
@@ -2232,8 +2233,10 @@
                     game.comboMultiplier = comboMultiplierFor(comboLevel);
                     let groups = findMatchGroups();
                     await processMatches(matches, groups, false);
-                    await applyGravity();
-                    await fillEmptySpaces();
+                    // settleBoard, not raw gravity: this is the path every
+                    // normal match takes, and it is where parcels slide down
+                    // their lane and get handed over
+                    await settleBoard();
                     matches = findMatches();
                     comboLevel++;
                 }
@@ -2552,8 +2555,11 @@
                 game.comboMultiplier = comboMultiplierFor(comboLevel);
                 let groups = findMatchGroups();
                 await processMatches(matches, groups, false);
-                await applyGravity();
-                await fillEmptySpaces();
+                // settleBoard, not raw gravity: parcels have to keep sliding
+                // down their lane and get collected during a chain too, or a
+                // parcel that lands on the bottom row mid-cascade just sits
+                // there until the next move
+                await settleBoard();
                 matches = findMatches();
                 comboLevel++;
             }
@@ -2885,6 +2891,13 @@
             return n;
         }
         
+        // Parcels need no movement code of their own. A parcel is a solid tile,
+        // so ordinary gravity already carries it: match the cat directly
+        // underneath and the hole you open lets the parcel drop into it. That
+        // is the whole mechanic - clearing the lane is what moves a delivery,
+        // and a lane nobody touches means a parcel that never moves. A parcel
+        // in the last row is handed over by collectIngredients below.
+
         // Delivery parcels drop off the bottom row. Any column works - the exit
         // columns are only the highlighted guide lane - so a parcel nudged out
         // of the lane still gets delivered instead of sitting there forever.
@@ -3000,8 +3013,9 @@
             checkGameState();
         }
         
-        // Settle a board that may have holes: gravity, refill, and finally
-        // collect any ingredients that have reached the exit columns
+        // Settle a board that may have holes: gravity (which also carries any
+        // parcel down its lane), refill, then hand over parcels that have
+        // reached the bottom row
         async function settleBoard() {
             if (findEmptyCells() > 0) {
                 await applyGravity();

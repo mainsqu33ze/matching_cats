@@ -12,6 +12,8 @@ Hosted on GitHub Pages: **<your-username>.github.io/matching_cats** once you pus
 - Tap two adjacent cats (or swipe) to swap them
 - Match 3+ identical cats to score points
 - Reach the goal score before you run out of moves to advance
+- Some levels ask for deliveries: parcels slide down the highlighted lane and
+  are handed over when they reach the bottom of the board, for 250 points each
 
 ## Powers
 
