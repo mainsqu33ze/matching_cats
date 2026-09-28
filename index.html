@@ -1250,6 +1250,89 @@
             music.jingleGain.gain.linearRampToValueAtTime(0, t + 0.12);
         }
 
+        // ---- POWER-UP SOUNDS ----
+        // One per power, each matched to how the power actually behaves.
+        // See assets/MUSIC.md for how to retune them.
+
+        // A short ascending run of notes, used for "scoop up" style sounds
+        function sfxRiser(notes, startDelay, gap, dur, type, vol) {
+            const ctx = music.ctx;
+            if (!ctx || !music.sfxGain) return;
+            const t0 = ctx.currentTime + (startDelay || 0);
+            notes.forEach((n, i) => {
+                sfxTone(n, dur, type, vol, t0 + i * gap);
+            });
+        }
+
+        // Small click when a power is armed, so selecting one feels responsive
+        function sfxArm() {
+            if (sfxThrottled(60)) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            sfxTone(84, 0.05, 'square', 0.1, ctx.currentTime);
+        }
+
+        // Cardboard box: a dull drop, then the cats leaping up into it
+        function sfxBox() {
+            if (!music.enabled) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            const t = ctx.currentTime;
+            sfxTone(40, 0.2, 'triangle', 0.3, t);          // the box landing
+            sfxNoise(0.12, 0.12, 700, t + 0.02);          // cardboard rustle
+            sfxRiser([64, 68, 72], 0.1, 0.05, 0.12, 'triangle', 0.16);
+        }
+
+        // Can of tuna: the pop of the lid, then the swarm rushing in
+        function sfxTuna() {
+            if (!music.enabled) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            const t = ctx.currentTime;
+            sfxTone(88, 0.06, 'sine', 0.26, t);            // the pop
+            sfxNoise(0.26, 0.2, 900, t + 0.04);           // the pour
+            sfxRiser([76, 71, 64], 0.06, 0.05, 0.14, 'sine', 0.18);
+        }
+
+        // Cat wand: a bright sparkle zip
+        function sfxWand() {
+            if (!music.enabled) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            const t = ctx.currentTime;
+            sfxNoise(0.16, 0.1, 5000, t);                 // the zip
+            sfxRiser([81, 84, 88, 91], 0, 0.045, 0.1, 'sine', 0.15);
+        }
+
+        // Slot machine: reel clicks while it spins, a clunk as each column
+        // locks in left to right, then a jackpot arpeggio. Scheduled up front
+        // against the audio clock so it stays in step with the animation
+        // without needing a timer.
+        function sfxSlotSpin(spinMs, staggerMs, columns) {
+            if (!music.enabled) return;
+            const ctx = music.ctx;
+            if (!ctx || !music.sfxGain) return;
+            const spinSec = spinMs / 1000;
+            const stagger = staggerMs / 1000;
+            const t0 = ctx.currentTime;
+
+            const tickGap = 0.1;
+            for (let i = 0; i * tickGap < spinSec; i++) {
+                const t = t0 + i * tickGap;
+                sfxNoise(0.025, 0.075, 3200, t);
+                sfxTone(88, 0.025, 'square', 0.04, t);
+            }
+
+            for (let c = 0; c < columns; c++) {
+                sfxTone(50 + c, 0.12, 'triangle', 0.2, t0 + spinSec + c * stagger);
+            }
+
+            const land = t0 + spinSec + (columns - 1) * stagger + 0.16;
+            [76, 81, 84, 88].forEach((n, i) => {
+                sfxTone(n, 0.22, 'triangle', 0.22, land + i * 0.07);
+            });
+        }
+
         function playNote(midi, time, dur, type, vol) {
             const ctx = music.ctx;
             if (!ctx || !music.master) return;
@@ -2154,6 +2237,7 @@
             } else if (game.powers[type] > 0) {
                 game.activePower = type;
                 game.wandSelection = null;
+                sfxArm();    // a small click so arming a power feels responsive
             }
             game.powerTargetPreview = null;
             updatePowerUI();
@@ -2245,6 +2329,7 @@
             }
             
             // Celebration: the box drops in and every affected cat leaps into it
+            sfxBox();
             await animateBoxCollect(row, col, affected);
             
             const points = affected.length * 20;
@@ -2289,6 +2374,7 @@
             const points = affected.length * 20;
             game.score += points;
             
+            sfxTuna();
             await animateTunaSwarm(row, col, affected);
             
             affected.forEach(m => {
@@ -2338,6 +2424,9 @@
             const landing = 240;
             const total = spinDuration + (colCount - 1) * stagger;
             
+            // Reel clicks, locking clunks and the jackpot, timed to match
+            sfxSlotSpin(spinDuration, stagger, colCount);
+            
             game.reel = { spinDuration: spinDuration, stagger: stagger, landing: landing, numTypes: numTypes, elapsed: 0 };
             await tween(total, p => {
                 game.reel.elapsed = p * total;
@@ -2353,6 +2442,7 @@
             game.grid[row1][col1].hidden = true;
             game.grid[row2][col2].hidden = true;
             
+            sfxWand();
             await animateWandChase(row1, col1, row2, col2);
             
             swapTiles(row1, col1, row2, col2);

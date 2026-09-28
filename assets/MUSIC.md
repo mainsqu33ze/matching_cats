@@ -185,6 +185,11 @@ everything — there is only one audio preference, kept in `localStorage` under
 | Match           | `sfxMatch()`    | `processMatches()`     | Two bright tones, climbing with the combo |
 | Board refilled  | `sfxRefill()`   | `fillEmptySpaces()`    | Soft plink plus a noise burst             |
 | Illegal swap    | `sfxInvalid()`  | `selectAndSwap()`      | One low muted thud                        |
+| Box power       | `sfxBox()`      | `applyBoxPower()`      | Low drop, then a rising scoop             |
+| Tuna power      | `sfxTuna()`     | `applyTunaPower()`     | Bright lid pop, then a pour and a descent |
+| Wand power      | `sfxWand()`     | `applyWandPower()`     | A quick upward sparkle                   |
+| Slot power      | `sfxSlotSpin()` | `animateSlotSpin()`    | Reel clicks, locking clunks, then a jackpot |
+| Arm a power     | `sfxArm()`      | `activatePower()`      | One small click                           |
 | Game over       | `sfxGameOver()` | `showGameOver()`       | Descending D-minor phrase, music stopped  |
 
 `sfxStopGameOver()` cuts the game-over phrase short when you retry, exit or
@@ -233,11 +238,54 @@ To retune the game-over descent, edit the five `sfxTone()` calls in
 `sfxGameOver()`. They are D5 → C5 → B♭4 → A4 followed by a held low D2, each with
 a `when` offset that sets the spacing between notes.
 
-### Burst protection
+### The power-up sounds
 
-`sfxThrottled(minGapMs)` is called first in each effect. A cascade can fire
-several matches in a few frames, and without this they would stack and clip.
-The gaps are 40ms for matches, 70ms for refills and 90ms for the invalid thud.
+The four powers each get a sound shaped to how the power behaves, so you can
+tell which one fired without looking at the screen:
+
+- **Box** (`sfxBox()`) — a low thump as the box lands, a cardboard rustle, then
+  three rising notes for the cats leaping up into it.
+- **Tuna** (`sfxTuna()`) — a bright pop for the lid, a filtered "pour", then a
+  descending run as the swarm rushes in.
+- **Wand** (`sfxWand()`) — a bright noise "zip" plus four fast rising notes.
+- **Slot** (`sfxSlotSpin()`) — the most involved one. It schedules reel clicks
+  every 100ms for the length of the spin, a low clunk as each column locks in
+  (rising a semitone per column, so they audibly count down), then a four-note
+  jackpot arpeggio.
+
+Three helpers make these easy to retune:
+
+```js
+sfxRiser(notes, startDelay, gap, dur, type, vol);   // an ascending run
+sfxTone(midi, dur, type, vol, when, bus);            // one note
+sfxNoise(dur, vol, filterHz, when, bus);             // filtered noise
+```
+
+`sfxRiser` is what gives the box, tuna and wand their shape — it just plays a
+list of notes spaced `gap` seconds apart.
+
+The slot sound takes millisecond timings so it stays locked to the animation,
+and derives everything from the board size:
+
+```js
+sfxSlotSpin(spinMs, staggerMs, columns);
+```
+
+It is called from `animateSlotSpin()` with the same constants the animation
+uses, so if you change the spin duration in the animation, the sound follows
+automatically. It schedules everything up front against the audio clock rather
+than using a timer, so it cannot drift during the 2.5-second spin.
+
+**These are the loudest effects in the game.** If they drown out the music, the
+`vol` arguments in each function are the place to turn them down — all of them
+are in the `0.1`–`0.3` range against a bus level of `0.55`.
+
+Burst protection is in `sfxThrottled(minGapMs)`, called first in the
+match, refill and invalid sounds. A cascade can fire several matches in a few
+frames, and without this they would stack and clip. The gaps are 40ms for
+matches, 70ms for refills and 90ms for the invalid thud. The power-up sounds
+are not throttled, since powers are used deliberately and never in bursts.
+
 If a sound feels like it is being swallowed, that gap is the first thing to
 lower.
 

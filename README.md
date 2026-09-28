@@ -60,6 +60,10 @@ There is a looping background track, plus short sounds for matches, the board
 refilling, an illegal swap, and game over. The match sound climbs in pitch
 through a combo, so chains of matches sound like they are building.
 
+Every power-up has its own sound too: a cardboard thud for the box, a can pop
+for the tuna, a sparkle for the wand, and mechanical reel clicks with a jackpot
+chime for the slot machine.
+
 To change the tune, tempo or key, retune any of the effects, or swap in a real
 track, see [`assets/MUSIC.md`](assets/MUSIC.md).
 
