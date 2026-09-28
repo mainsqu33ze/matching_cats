@@ -2555,10 +2555,9 @@
                 game.comboMultiplier = comboMultiplierFor(comboLevel);
                 let groups = findMatchGroups();
                 await processMatches(matches, groups, false);
-                // settleBoard, not raw gravity: parcels have to keep sliding
-                // down their lane and get collected during a chain too, or a
-                // parcel that lands on the bottom row mid-cascade just sits
-                // there until the next move
+                // settleBoard, not raw gravity: a parcel that lands on the
+                // bottom row mid-cascade has to be handed over there and then,
+                // not left sitting until the next move
                 await settleBoard();
                 matches = findMatches();
                 comboLevel++;
