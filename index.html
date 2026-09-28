@@ -3338,26 +3338,48 @@
             chips.innerHTML = parts.length ? parts.join('  ') : '';
         }
         
-        // Frosty ice underlay drawn behind the tile artwork
-        function drawIceOverlay(x, y, s, layers) {
-            const ctx = game.ctx;
-            const alpha = layers >= 2 ? 0.75 : 0.45;
-            ctx.save();
-            ctx.globalAlpha = alpha;
-            ctx.fillStyle = '#d6f3ff';
-            ctx.fillRect(x + 2, y + 2, s - 4, s - 4);
-            ctx.strokeStyle = '#9ad7f2';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(x + s * 0.3, y + s * 0.15);
-            ctx.lineTo(x + s * 0.45, y + s * 0.5);
-            ctx.lineTo(x + s * 0.2, y + s * 0.82);
-            ctx.moveTo(x + s * 0.65, y + s * 0.25);
-            ctx.lineTo(x + s * 0.55, y + s * 0.62);
-            ctx.lineTo(x + s * 0.8, y + s * 0.85);
-            ctx.stroke();
-            ctx.restore();
-        }
+// Frosty ice, drawn OVER the tile artwork. A frozen tile has to be obvious:
+// an invisible blocker silently rejects every match that runs through it,
+// which reads as the board being broken until a power blasts it away.
+function drawIceOverlay(cx, cy, s, layers) {
+    const ctx = game.ctx;
+    const x = cx - s / 2;
+    const y = cy - s / 2;
+    ctx.save();
+    // Light wash - the cat underneath stays readable
+    ctx.globalAlpha = layers >= 2 ? 0.55 : 0.4;
+    ctx.fillStyle = '#cfeeff';
+    ctx.fillRect(x + 2, y + 2, s - 4, s - 4);
+    // Solid frozen frame so a blocked cell reads instantly
+    ctx.globalAlpha = 0.95;
+    ctx.strokeStyle = '#4fc3f0';
+    ctx.lineWidth = layers >= 2 ? 4 : 3;
+    ctx.strokeRect(x + 3, y + 3, s - 6, s - 6);
+    // Snowflake cracks
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + s * 0.3, y + s * 0.15);
+    ctx.lineTo(x + s * 0.45, y + s * 0.5);
+    ctx.lineTo(x + s * 0.2, y + s * 0.82);
+    ctx.moveTo(x + s * 0.65, y + s * 0.25);
+    ctx.lineTo(x + s * 0.55, y + s * 0.62);
+    ctx.lineTo(x + s * 0.8, y + s * 0.85);
+    ctx.stroke();
+    // Badge with the layers left, i.e. how many matches still thaw it
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#0b7fb8';
+    ctx.beginPath();
+    ctx.arc(x + s - 12, y + 12, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(layers), x + s - 12, y + 12.5);
+    ctx.restore();
+}
         
         // Chunky grey rock that only powers and bombs can break
         function drawRockSprite(cx, cy, size) {
@@ -3572,11 +3594,8 @@
                         );
                     }
                     
-                    // Frost underlays sit behind the artwork; crates/bombs sit on top
-                    if (tile.ice > 0) {
-                        drawIceOverlay(col * game.tileSize, row * game.tileSize, game.tileSize, tile.ice);
-                    }
-                    
+                    // Crates/bombs/ice sit on top of the artwork so a blocked cell is never
+                    // mistaken for a playable one
                     if (tile.rock) {
                         drawRockSprite(tile.x + game.tileSize / 2, tile.y + game.tileSize / 2, game.tileSize * 0.62);
                     } else if (tile.ingredient === 1) {
@@ -3596,6 +3615,11 @@
                         if (tile.bomb > 0) {
                             drawBombBadge(tile.x + game.tileSize, tile.y + game.tileSize, game.tileSize, tile.bomb);
                         }
+                    }
+                    
+                    // Frost frames the artwork (drawn last, so it always reads)
+                    if (tile.ice > 0) {
+                        drawIceOverlay(tile.x + game.tileSize / 2, tile.y + game.tileSize / 2, game.tileSize, tile.ice);
                     }
                     
                     // Quota target: ring this colour so it stands out on photo
