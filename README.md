@@ -50,6 +50,15 @@ replace the emojis automatically:
 Any missing file simply falls back to the emoji. See the READMEs in those
 folders for details.
 
+## Music
+
+The ♪ button in the header (and on the welcome screen) turns the background
+music off and on, and the choice is remembered between visits. The music is
+generated in the browser, so there is no audio file and nothing to download.
+
+To change the tune, tempo or key, or to swap in a real track, see
+[`assets/MUSIC.md`](assets/MUSIC.md).
+
 ## Hosting on GitHub Pages
 
 1. Push this folder to a GitHub repo (e.g. `matching_cats`)

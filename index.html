@@ -417,6 +417,57 @@
             display: none;
         }
         
+        /* ---- Background music toggle ----
+           Anchored to the header's top-right (never overlaps the stats bar) and
+           mirrored in the welcome modal, so it is reachable on every screen. */
+        .header {
+            position: relative;
+        }
+        .music-btn {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid #764ba2;
+            background: rgba(255, 255, 255, 0.92);
+            color: #764ba2;
+            font-size: 1.2em;
+            line-height: 1;
+            padding: 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .music-btn.static {
+            position: static;
+            margin: 10px auto 0;
+        }
+        .music-btn:active {
+            transform: scale(0.92);
+        }
+        .music-btn.muted {
+            background: rgba(235, 235, 235, 0.92);
+            border-color: #999;
+            color: #999;
+        }
+        
+        /* Keep the centred title clear of the toggle */
+        .header h1 {
+            padding: 0 46px;
+        }
+        
+        /* Low-moves warning on the moves counter (was wrongly nested inside the
+           max-height media query, so it only styled short screens) */
+        #movesDisplay.low {
+            color: #e74c3c;
+            animation: pulse 1s infinite;
+        }
+        
         .modal {
             background: white;
             border-radius: 20px;
@@ -519,12 +570,7 @@
             .stat-value {
                 font-size: 1.1em;
             }
-        #movesDisplay.low {
-            color: #e74c3c;
-            animation: pulse 1s infinite;
-        }
-        
-        .powers-bar {
+            .powers-bar {
                 margin-bottom: 8px;
                 gap: 8px;
             }
@@ -552,6 +598,7 @@
         <div class="header">
             <h1>&#128049; Meow Match &#128049;</h1>
             <div class="subtitle">29 Levels for 29 Years of Amazing!</div>
+            <button class="music-btn" id="musicBtn" type="button" aria-pressed="true" aria-label="Turn background music off" title="Background music">&#9834;</button>
         </div>
         
         <div class="stats-bar">
@@ -609,6 +656,7 @@
             <button class="btn" id="startBtn">Start Playing!</button>
             <button class="btn ghost" id="aboutGameBtn" type="button">&#128214; About the Game</button>
             <button class="btn hidden" id="resumeSaveBtn"></button>
+            <button class="music-btn static" id="musicBtnMenu" type="button" aria-pressed="true" aria-label="Turn background music off" title="Background music">&#9834;</button>
             
             <div class="about hidden" id="aboutSection">
                 <h3>Rules</h3>
@@ -984,6 +1032,188 @@
         }
         
         // Initialize game
+        // ---- BACKGROUND MUSIC ----
+        // Synthesised with the Web Audio API so there is no audio file to ship,
+        // download or cache: a gentle music-box loop over a C-Am-F-G progression.
+        //
+        // TO CHANGE THE MUSIC (see assets/MUSIC.md for full details):
+        //   - Different tune: edit MELODY + BASS_ROOTS in scheduleStep() below.
+        //     They are MIDI note numbers (C4 = 60, one number = one semitone),
+        //     0 = rest. Keep 8 numbers per bar and 4 bars.
+        //   - Different tempo: MUSIC_STEP (seconds per eighth note; 0.3 = 100 BPM).
+        //   - Different key: add your offset to both arrays in scheduleStep().
+        //   - Real audio file instead: see assets/MUSIC.md. The toggle, the
+        //     saved preference and the tab-visibility pause are all in
+        //     setMusicEnabled()/updateMusicBtn() and carry over unchanged.
+        const MUSIC_PREF_KEY = 'meowMatchMusic';
+        const MUSIC_STEP = 0.3;          // one eighth note at 100 BPM
+        const MUSIC_STEPS = 32;          // 4 bars of 8 eighth notes
+
+        const music = {
+            enabled: true,
+            ctx: null,
+            master: null,
+            timer: null,
+            step: 0,
+            nextTime: 0
+        };
+
+        function loadMusicPref() {
+            try {
+                const raw = localStorage.getItem(MUSIC_PREF_KEY);
+                if (raw === 'off') return false;
+                if (raw === 'on') return true;
+            } catch (e) {}
+            return true;   // on by default
+        }
+
+        function saveMusicPref() {
+            try {
+                localStorage.setItem(MUSIC_PREF_KEY, music.enabled ? 'on' : 'off');
+            } catch (e) {}
+        }
+
+        function noteFreq(midi) {
+            return 440 * Math.pow(2, (midi - 69) / 12);
+        }
+
+        // Must be called from inside a user gesture the first time, otherwise
+        // browsers/iOS create the context in a "suspended" state.
+        function ensureAudio() {
+            if (music.ctx) return music.ctx;
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return null;
+            try {
+                music.ctx = new AC();
+                music.master = music.ctx.createGain();
+                music.master.gain.value = 0;
+                music.master.connect(music.ctx.destination);
+
+                // Soft feedback delay for a bit of room around the melody
+                const delay = music.ctx.createDelay(1);
+                const feedback = music.ctx.createGain();
+                const wet = music.ctx.createGain();
+                delay.delayTime.value = 0.19;
+                feedback.gain.value = 0.24;
+                wet.gain.value = 0.3;
+                music.master.connect(delay);
+                delay.connect(feedback);
+                feedback.connect(delay);
+                delay.connect(wet);
+                wet.connect(music.ctx.destination);
+            } catch (e) {
+                music.ctx = null;
+            }
+            return music.ctx;
+        }
+
+        function playNote(midi, time, dur, type, vol) {
+            const ctx = music.ctx;
+            if (!ctx || !music.master) return;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = type;
+            osc.frequency.value = noteFreq(midi);
+            // Soft attack + exponential tail = music-box rather than a beep
+            gain.gain.setValueAtTime(0.0001, time);
+            gain.gain.exponentialRampToValueAtTime(vol, time + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+            osc.connect(gain);
+            gain.connect(music.master);
+            osc.start(time);
+            osc.stop(time + dur + 0.05);
+        }
+
+        function scheduleStep(step, time) {
+            // MIDI note numbers: C4 (middle C) = 60, so each number is one
+            // semitone above it. 0 = rest. 8 numbers per bar, 4 bars total.
+            // See assets/MUSIC.md before editing.
+            const MELODY = [
+                76, 79, 76, 72,  74, 76, 79, 0,   // bar 1  C
+                81, 79, 76, 74,  72, 76,  0,  0,   // bar 2  Am
+                77, 81, 84, 81,  79, 77, 76, 0,    // bar 3  F
+                74, 79, 83, 79,  81,  0,  0,  0    // bar 4  G
+            ];
+            const BASS_ROOTS = [36, 33, 29, 31];  // C2, A1, F1, G1 — one per bar
+
+            const note = MELODY[step % MELODY.length];
+            if (note) playNote(note, time, MUSIC_STEP * 1.7, 'triangle', 0.20);
+
+            const inBar = step % 8;
+            if (inBar === 0 || inBar === 4) {
+                const root = BASS_ROOTS[Math.floor(step / 8) % 4];
+                playNote(root, time, MUSIC_STEP * 1.8, 'sine', 0.26);
+            }
+        }
+
+        // Lookahead scheduler: queue notes slightly ahead of the audio clock so
+        // timing does not drift with setInterval jitter.
+        function musicPump() {
+            const ctx = music.ctx;
+            if (!ctx) return;
+            const horizon = ctx.currentTime + 0.15;
+            while (music.nextTime < horizon) {
+                scheduleStep(music.step, music.nextTime);
+                music.nextTime += MUSIC_STEP;
+                music.step = (music.step + 1) % MUSIC_STEPS;
+            }
+        }
+
+        function startMusic() {
+            if (!music.enabled) return;
+            const ctx = ensureAudio();
+            if (!ctx || !music.master) return;
+            if (ctx.state === 'suspended' && ctx.resume) ctx.resume();
+            if (music.timer) return;
+
+            music.nextTime = ctx.currentTime + 0.08;
+            music.step = 0;
+            const t = ctx.currentTime;
+            music.master.gain.cancelScheduledValues(t);
+            music.master.gain.setValueAtTime(music.master.gain.value, t);
+            music.master.gain.linearRampToValueAtTime(0.16, t + 1.2);   // ease in
+            music.timer = setInterval(musicPump, 30);
+            musicPump();
+        }
+
+        function stopMusic() {
+            if (music.timer) {
+                clearInterval(music.timer);
+                music.timer = null;
+            }
+            const ctx = music.ctx;
+            if (ctx && music.master) {
+                const t = ctx.currentTime;
+                music.master.gain.cancelScheduledValues(t);
+                music.master.gain.setValueAtTime(music.master.gain.value, t);
+                music.master.gain.linearRampToValueAtTime(0, t + 0.35);   // ease out
+            }
+        }
+
+        function setMusicEnabled(on) {
+            music.enabled = !!on;
+            saveMusicPref();
+            updateMusicBtn();
+            if (music.enabled) {
+                startMusic();
+            } else {
+                stopMusic();
+            }
+        }
+
+        function updateMusicBtn() {
+            // Header and welcome-menu copies both reflect the same preference
+            const btns = document.querySelectorAll('.music-btn');
+            for (let i = 0; i < btns.length; i++) {
+                const btn = btns[i];
+                btn.classList.toggle('muted', !music.enabled);
+                btn.setAttribute('aria-pressed', music.enabled ? 'true' : 'false');
+                const label = music.enabled ? 'Turn background music off' : 'Turn background music on';
+                btn.setAttribute('aria-label', label);
+                btn.title = music.enabled ? 'Music: on' : 'Music: off';
+            }
+        }
+
         function initGame() {
             game.canvas = document.getElementById('gameCanvas');
             game.ctx = game.canvas.getContext('2d');
@@ -998,6 +1228,8 @@
             loadLevel(game.currentLevel);
             game.suppressSave = false;
             setupEventListeners();
+            music.enabled = loadMusicPref();
+            updateMusicBtn();
         }
         
         function setupCanvas() {
@@ -1359,6 +1591,35 @@
             document.getElementById('startBtn').addEventListener('click', () => {
                 document.getElementById('welcomeOverlay').classList.add('hidden');
                 saveProgress();
+                // First real gesture, so the audio context is allowed to run
+                startMusic();
+            });
+            
+            // Music toggle: click turns it off, click again turns it back on.
+            // Both the header button and the welcome-menu copy share the class.
+            const musicBtns = document.querySelectorAll('.music-btn');
+            for (let i = 0; i < musicBtns.length; i++) {
+                musicBtns[i].addEventListener('click', () => {
+                    setMusicEnabled(!music.enabled);
+                });
+            }
+            
+            // A tap anywhere counts as the gesture that unlocks audio, so
+            // reaching the board with a keyboard/mouse also starts the music
+            const onFirstGesture = () => {
+                if (music.enabled) startMusic();
+                document.removeEventListener('pointerdown', onFirstGesture);
+            };
+            document.addEventListener('pointerdown', onFirstGesture);
+            
+            // Don't play into the void: pause when the tab is hidden or the
+            // phone is backgrounded, and pick back up when it returns
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    stopMusic();
+                } else if (music.enabled) {
+                    startMusic();
+                }
             });
             
             // About the Game section (rules, powers, special tiles)
