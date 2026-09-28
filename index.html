@@ -1061,7 +1061,7 @@
             timer: null,
             step: 0,
             nextTime: 0,
-            lastSfxAt: 0
+            sfxLastAt: {}
         };
 
         function loadMusicPref() {
@@ -1131,11 +1131,16 @@
 
         // Guard against a burst of effects stacking on top of each other and
         // clipping (a fast cascade can fire several in a few frames).
-        function sfxThrottled(minGapMs) {
+        // Each effect gets its own slot: a match and the ice it chips are
+        // different sounds that legitimately happen on the same millisecond,
+        // so a shared timer would silence one of them every time.
+        function sfxThrottled(name, minGapMs) {
             if (!music.enabled) return true;
+            if (!music.sfxLastAt) music.sfxLastAt = {};
             const now = Date.now();
-            if (music.lastSfxAt && now - music.lastSfxAt < minGapMs) return true;
-            music.lastSfxAt = now;
+            const last = music.sfxLastAt[name] || 0;
+            if (last && now - last < minGapMs) return true;
+            music.sfxLastAt[name] = now;
             return false;
         }
 
@@ -1188,7 +1193,7 @@
         // A match: a bright two-note "ping" that climbs with the combo, so
         // chains of matches sound like they are building.
         function sfxMatch(combo) {
-            if (sfxThrottled(40)) return;
+            if (sfxThrottled('Match', 40)) return;
             const ctx = music.ctx;
             if (!ctx) return;
             const step = Math.min(Math.max((combo || 1) - 1, 0), 7);
@@ -1200,7 +1205,7 @@
 
         // The board being repopulated: a soft downward "plink" as cats drop in
         function sfxRefill() {
-            if (sfxThrottled(70)) return;
+            if (sfxThrottled('Refill', 70)) return;
             const ctx = music.ctx;
             if (!ctx) return;
             const t = ctx.currentTime;
@@ -1211,7 +1216,7 @@
 
         // A blocked/invalid move: a short muted thud
         function sfxInvalid() {
-            if (sfxThrottled(90)) return;
+            if (sfxThrottled('Invalid', 90)) return;
             const ctx = music.ctx;
             if (!ctx) return;
             sfxTone(45, 0.11, 'square', 0.1, ctx.currentTime);
@@ -1266,7 +1271,7 @@
 
         // Small click when a power is armed, so selecting one feels responsive
         function sfxArm() {
-            if (sfxThrottled(60)) return;
+            if (sfxThrottled('Arm', 60)) return;
             const ctx = music.ctx;
             if (!ctx) return;
             sfxTone(84, 0.05, 'square', 0.1, ctx.currentTime);
@@ -1308,8 +1313,7 @@
         // locks in left to right, then a jackpot arpeggio. Scheduled up front
         // against the audio clock so it stays in step with the animation
         // without needing a timer.
-        function sfxSlotSpin(spinMs, staggerMs, columns) {
-            if (!music.enabled) return;
+        function sfxSlotSpin(spinMs, staggerMs, columns) {            if (!music.enabled) return;
             const ctx = music.ctx;
             if (!ctx || !music.sfxGain) return;
             const spinSec = spinMs / 1000;
@@ -1331,6 +1335,85 @@
             [76, 81, 84, 88].forEach((n, i) => {
                 sfxTone(n, 0.22, 'triangle', 0.22, land + i * 0.07);
             });
+        }
+
+        // ---- BLOCKER AND DELIVERY SOUNDS ----
+        // Ice and crates chip down over a couple of matches before they go, so
+        // they get a "chipped" sound and a distinct "shattered" one. Every one
+        // takes how many were hit, so a big collapse sounds bigger than a
+        // single tile without needing a separate set of samples.
+        // The chip sounds are throttled, because a fast cascade can chip the
+        // same layer many times over. The break and delivery sounds are not:
+        // they fire once per resolution, already combined, and they are the
+        // payoff moment - a cascade can break two separate groups of blockers
+        // milliseconds apart and both should be heard.
+
+        // A chip that leaves a layer behind: a hard, bright scrape
+        function sfxIceChip(count) {
+            if (sfxThrottled('IceChip', 50)) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            const t = ctx.currentTime;
+            sfxNoise(0.07, 0.13, 6000, t);              // frost cracking
+            sfxTone(93, 0.06, 'triangle', 0.12, t);
+            sfxTone(88, 0.05, 'sine', 0.08, t + 0.02);
+            if (count > 2) sfxTone(85, 0.05, 'triangle', 0.09, t + 0.05);
+        }
+
+        // Ice finally going: a glassy shatter with a few bright shards
+        function sfxIceBreak(count) {
+            if (!music.enabled) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            const t = ctx.currentTime;
+            sfxNoise(0.22, 0.2, 7000, t);              // the shatter
+            sfxTone(96, 0.14, 'sine', 0.14, t);
+            // Shards trailing off, more of them the more ice went at once
+            const shards = Math.min(2 + count, 6);
+            for (let i = 0; i < shards; i++) {
+                sfxTone(91 - i * 3, 0.1, 'sine', 0.08, t + 0.04 + i * 0.035);
+            }
+        }
+
+        // A crate losing a layer: a hollow wooden knock
+        function sfxCrateChip(count) {
+            if (sfxThrottled('CrateChip', 50)) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            const t = ctx.currentTime;
+            sfxTone(57, 0.09, 'square', 0.13, t);       // mid knock, short
+            sfxNoise(0.05, 0.08, 1600, t);
+            if (count > 2) sfxTone(60, 0.07, 'square', 0.08, t + 0.04);
+        }
+
+        // A crate going for good: a splintering crack
+        function sfxCrateBreak(count) {
+            if (!music.enabled) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            const t = ctx.currentTime;
+            sfxTone(43, 0.2, 'square', 0.2, t);        // the body of the break
+            sfxNoise(0.18, 0.2, 2400, t);              // wood splintering
+            const bits = Math.min(2 + count, 5);
+            for (let i = 0; i < bits; i++) {
+                sfxTone(55 + i * 2, 0.07, 'square', 0.07, t + 0.03 + i * 0.04);
+            }
+        }
+
+        // A delivery reaching the bottom: a warm, happy little flourish.
+        // Collecting several at once layers the notes instead of stacking.
+        function sfxDelivery(count) {
+            if (!music.enabled) return;
+            const ctx = music.ctx;
+            if (!ctx) return;
+            const t = ctx.currentTime;
+            const n = Math.max(1, Math.min(count, 4));
+            // C major arpeggio, climbing - reads as "yay"
+            const arp = [72, 76, 79, 84];
+            for (let i = 0; i < n; i++) {
+                sfxTone(arp[i], 0.24, 'triangle', 0.2, t + i * 0.075);
+            }
+            sfxTone(96, 0.18, 'sine', 0.08, t + n * 0.075);   // sparkle on top
         }
 
         function playNote(midi, time, dur, type, vol) {
@@ -2621,16 +2704,21 @@
             }
             
             const broken = [];
+            // Chipped (still has a layer left) and fully broken are counted
+            // apart so each can get its own sound
+            let iceChipped = 0, iceBroken = 0, crateChipped = 0, crateBroken = 0;
             for (let r = 0; r < game.gridSize; r++) {
                 for (let c = 0; c < game.gridSize; c++) {
                     const t = game.grid[r][c];
                     if (t.ice > 0 && (rows.has(r) || cols.has(c))) {
                         t.ice--;
-                        if (t.ice === 0) broken.push({ row: r, col: c });
+                        if (t.ice === 0) { iceBroken++; broken.push({ row: r, col: c }); }
+                        else iceChipped++;
                     }
                     if (t.crate > 0 && isAdjacentToMatch(r, c, matches)) {
                         t.crate--;
-                        if (t.crate === 0) broken.push({ row: r, col: c });
+                        if (t.crate === 0) { crateBroken++; broken.push({ row: r, col: c }); }
+                        else crateChipped++;
                     }
                 }
             }
@@ -2646,6 +2734,11 @@
                     );
                 });
             }
+            
+            if (iceChipped) sfxIceChip(iceChipped);
+            if (iceBroken) sfxIceBreak(iceBroken);
+            if (crateChipped) sfxCrateChip(crateChipped);
+            if (crateBroken) sfxCrateBreak(crateBroken);
         }
         
         function isAdjacentToMatch(r, c, matches) {
@@ -2817,6 +2910,7 @@
                     collected++;
                 }
             }
+            if (collected > 0) sfxDelivery(collected);
             return collected;
         }
         

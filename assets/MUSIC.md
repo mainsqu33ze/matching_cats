@@ -190,6 +190,11 @@ everything — there is only one audio preference, kept in `localStorage` under
 | Wand power      | `sfxWand()`     | `applyWandPower()`     | A quick upward sparkle                   |
 | Slot power      | `sfxSlotSpin()` | `animateSlotSpin()`    | Reel clicks, locking clunks, then a jackpot |
 | Arm a power     | `sfxArm()`      | `activatePower()`      | One small click                           |
+| Ice chipped     | `sfxIceChip()`  | `chipBlockers()`       | Bright frosty scrape                      |
+| Ice broken      | `sfxIceBreak()` | `chipBlockers()`       | Glassy shatter with trailing shards       |
+| Crate chipped   | `sfxCrateChip()` | `chipBlockers()`      | Hollow wooden knock                       |
+| Crate broken    | `sfxCrateBreak()` | `chipBlockers()`    | Low splintering crack                     |
+| Delivery        | `sfxDelivery()` | `collectIngredients()` | Rising major arpeggio                     |
 | Game over       | `sfxGameOver()` | `showGameOver()`       | Descending D-minor phrase, music stopped  |
 
 `sfxStopGameOver()` cuts the game-over phrase short when you retry, exit or
@@ -280,11 +285,47 @@ than using a timer, so it cannot drift during the 2.5-second spin.
 `vol` arguments in each function are the place to turn them down — all of them
 are in the `0.1`–`0.3` range against a bus level of `0.55`.
 
-Burst protection is in `sfxThrottled(minGapMs)`, called first in the
-match, refill and invalid sounds. A cascade can fire several matches in a few
-frames, and without this they would stack and clip. The gaps are 40ms for
-matches, 70ms for refills and 90ms for the invalid thud. The power-up sounds
-are not throttled, since powers are used deliberately and never in bursts.
+### The blocker and delivery sounds
+
+Ice and crates take two hits to clear, so chipping and breaking get separate
+sounds — you can tell from the noise alone whether a blocker lost a layer or
+went entirely:
+
+- **Ice chip** (`sfxIceChip()`) — a bright, short scrape. Frosty rather than
+  round, to contrast with the wood.
+- **Ice break** (`sfxIceBreak()`) — a longer, glassy shatter: a wide noise burst
+  plus bright shards trailing off and down.
+- **Crate chip** (`sfxCrateChip()`) — a hollow wooden knock.
+- **Crate break** (`sfxCrateBreak()`) — a low splintering crack.
+- **Delivery** (`sfxDelivery()`) — a rising C major arpeggio. Collecting two or
+  three parcels at once layers extra notes in rather than playing the flourish
+  several times over.
+
+All five take a count, so breaking six tiles at once throws off more shards
+than breaking one, without needing separate samples. The counts are capped
+(6 shards, 5 splinters, 4 arpeggio notes) so a large collapse cannot pile up.
+
+They are wired in at the single point each happens: `chipBlockers()` works out
+how much was chipped versus fully broken and calls each sound once, and
+`collectIngredients()` calls the delivery sound with the number collected.
+
+Note the deliberate asymmetry in throttling below: chips are throttled, breaks
+and deliveries are not.
+
+### Burst protection
+
+`sfxThrottled(name, minGapMs)` is called first in the match, refill, invalid and
+*chip* sounds. Each effect gets its own slot in `music.sfxLastAt`, so two
+different sounds on the same millisecond do not silence each other — a match and
+the ice it chips happen in the same instant and both need to be heard.
+
+The gaps are 40ms for matches, 70ms for refills, 90ms for the invalid thud, and
+50ms for the two chip sounds. The power-up, break and delivery sounds are not
+throttled at all: powers are used deliberately, and the break and delivery
+sounds already fire once per resolution with everything combined, so they are
+never a burst. Throttling them would actually cost you sound — a cascade can
+break two separate groups of blockers milliseconds apart, and both are the
+payoff moment.
 
 If a sound feels like it is being swallowed, that gap is the first thing to
 lower.
@@ -307,7 +348,10 @@ node test_sfx_wiring.cjs    # plays real moves and checks they actually fire
 
 `test_sfx_wiring.cjs` is the one that catches a forgotten hook: it plays genuine
 matching moves, an illegal swap and an exhausted move counter, and counts the
-notes that come out the other end. If you move a call to a different function,
+notes that come out the other end. It also chips a real ice tile down to a
+break, breaks a real crate, and collects a parcel off the bottom row, so a
+misplaced sound in `chipBlockers()` or `collectIngredients()` shows up as a
+failure rather than as silence on a phone. If you move a call to a different function,
 that test will tell you the sound stopped firing.
 
 If you change `MELODY` or `BASS_ROOTS`, update the expected pitch set in
