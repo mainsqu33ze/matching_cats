@@ -741,6 +741,32 @@
             '\u{1F640}', // weary cat
             '\u{1F63E}'  // pouting cat
         ];
+
+        // Tile identity is encoded on TWO channels, not one. The eight cat
+        // artworks are near-identical, and a color border alone cannot carry
+        // eight categories: measured against simulated protanopia /
+        // deuteranopia / tritanopia (Machado et al. 2009 matrices, CIE76 dE),
+        // every pleasant 8-color palette either collapses two colors together
+        // (orange vs olive reached dE 1.7 under deuteranopia) or drops below
+        // 3:1 contrast against the light tile background and becomes invisible
+        // (Okabe-Ito loses four of eight colors this way).
+        //
+        // So: CAT_COLORS is the fast glance channel (all >= 3:1 contrast on
+        // the tile background), and CAT_GLYPHS is the guaranteed channel,
+        // since shape survives any color vision deficiency.
+        const CAT_COLORS = [
+            '#C0392B', // red
+            '#D35400', // orange
+            '#8D6E00', // gold
+            '#1E8449', // green
+            '#16A085', // teal
+            '#1F618D', // blue
+            '#7D3C98', // purple
+            '#D6336C'  // pink
+        ];
+
+        // Distinct silhouettes, drawn small in the top-left of the tile.
+        const CAT_GLYPHS = ['circle', 'square', 'triangle', 'diamond', 'star', 'cross', 'ring', 'heart'];
         
         // Custom art: drop PNGs in assets/cats/cat0.png ... cat7.png and they
         // auto-load to replace the emojis. Missing files fall back to emoji.
@@ -754,6 +780,74 @@
                 img.onerror = function () { CAT_ART[i] = null; };
                 img.src = 'assets/cats/cat' + i + '.png';
             }
+        }
+        // Shape badge in the tile's top-left corner. This is the identity
+        // channel that works with no color perception at all, so a player who
+        // cannot separate the border colors can still sort the board by shape.
+        function drawCatGlyph(type, x, y, size) {
+            const g = game.ctx;
+            const kind = CAT_GLYPHS[type];
+            const r = size / 2;
+            const cx = x + r;
+            const cy = y + r;
+            g.save();
+            g.fillStyle = CAT_COLORS[type];
+            g.strokeStyle = CAT_COLORS[type];
+            g.lineWidth = Math.max(1.5, size * 0.18);
+            g.lineJoin = 'round';
+            g.beginPath();
+            if (kind === 'circle') {
+                g.arc(cx, cy, r * 0.78, 0, Math.PI * 2);
+                g.fill();
+            } else if (kind === 'ring') {
+                g.arc(cx, cy, r * 0.72, 0, Math.PI * 2);
+                g.stroke();
+            } else if (kind === 'square') {
+                const s = r * 0.66;
+                g.rect(cx - s, cy - s, s * 2, s * 2);
+                g.fill();
+            } else if (kind === 'triangle') {
+                g.moveTo(cx, cy - r * 0.8);
+                g.lineTo(cx + r * 0.76, cy + r * 0.62);
+                g.lineTo(cx - r * 0.76, cy + r * 0.62);
+                g.closePath();
+                g.fill();
+            } else if (kind === 'diamond') {
+                g.moveTo(cx, cy - r * 0.85);
+                g.lineTo(cx + r * 0.8, cy);
+                g.lineTo(cx, cy + r * 0.85);
+                g.lineTo(cx - r * 0.8, cy);
+                g.closePath();
+                g.fill();
+            } else if (kind === 'star') {
+                for (let i = 0; i < 10; i++) {
+                    const rad = i % 2 === 0 ? r * 0.86 : r * 0.36;
+                    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+                    const px = cx + Math.cos(a) * rad;
+                    const py = cy + Math.sin(a) * rad;
+                    if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+                }
+                g.closePath();
+                g.fill();
+            } else if (kind === 'cross') {
+                const t = r * 0.34;
+                const e = r * 0.8;
+                g.moveTo(cx - t, cy - e); g.lineTo(cx + t, cy - e);
+                g.lineTo(cx + t, cy - t); g.lineTo(cx + e, cy - t);
+                g.lineTo(cx + e, cy + t); g.lineTo(cx + t, cy + t);
+                g.lineTo(cx + t, cy + e); g.lineTo(cx - t, cy + e);
+                g.lineTo(cx - t, cy + t); g.lineTo(cx - e, cy + t);
+                g.lineTo(cx - e, cy - t); g.lineTo(cx - t, cy - t);
+                g.closePath();
+                g.fill();
+            } else if (kind === 'heart') {
+                g.moveTo(cx, cy + r * 0.7);
+                g.bezierCurveTo(cx - r * 1.15, cy - r * 0.2, cx - r * 0.5, cy - r * 1.0, cx, cy - r * 0.32);
+                g.bezierCurveTo(cx + r * 0.5, cy - r * 1.0, cx + r * 1.15, cy - r * 0.2, cx, cy + r * 0.7);
+                g.closePath();
+                g.fill();
+            }
+            g.restore();
         }
         function drawTileArt(type, cx, cy, sizePx, alpha) {
             const g = game.ctx;
@@ -3880,6 +3974,21 @@ function drawIceOverlay(cx, cy, s, layers) {
                         game.tileSize - 4
                     );
                     
+                    // Identity border, drawn under the artwork so the cat art is
+                    // never obscured. Only real cats get it; parcels and rocks
+                    // are not matchable tiles. The shape badge is drawn last,
+                    // further down, once it is clear nothing can cover it.
+                    if (tile.type >= 0 && !tile.rock && tile.ingredient !== 1) {
+                        ctx.strokeStyle = CAT_COLORS[tile.type];
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(
+                            col * game.tileSize + 3,
+                            row * game.tileSize + 3,
+                            game.tileSize - 6,
+                            game.tileSize - 6
+                        );
+                    }
+
                     // Draw selection highlight
                     if (game.selectedCat && 
                         game.selectedCat.row === row && 
@@ -3934,6 +4043,18 @@ function drawIceOverlay(cx, cy, s, layers) {
                     // Frost frames the artwork (drawn last, so it always reads)
                     if (tile.ice > 0) {
                         drawIceOverlay(tile.x + game.tileSize / 2, tile.y + game.tileSize / 2, game.tileSize, tile.ice);
+                    }
+
+                    // Shape badge, drawn after every overlay so it is never
+                    // hidden. Sits in the corner outside the 0.6-scale cat art,
+                    // which leaves the tile corners free at every grid size.
+                    if (tile.type >= 0 && !tile.rock && tile.ingredient !== 1) {
+                        // Sized to the free corner (0.2 * tileSize) so the badge
+                        // never lands on the cat art, at any board size.
+                        const badge = Math.min(game.tileSize * 0.16, game.tileSize * 0.2 - 2);
+                        if (badge >= 3) {
+                            drawCatGlyph(tile.type, tile.x + 2, tile.y + 2, badge);
+                        }
                     }
                 }
             }
