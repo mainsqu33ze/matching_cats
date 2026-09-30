@@ -199,15 +199,6 @@
             padding: 4px 8px;
         }
         
-        .quota-dot {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            vertical-align: -1px;
-            box-shadow: 0 0 0 2px #fff, 0 0 3px rgba(0, 0, 0, 0.35);
-        }
-        
         .boss-banner {
             text-align: center;
             font-size: 0.85em;
@@ -665,7 +656,7 @@
                     <li>Match 3+ identical cats to score points</li>
                     <li>Cascades double your points every chain&mdash;and earn powers too</li>
                     <li>Powers carry over between levels!</li>
-                    <li>Reach the goal score AND finish the level's objectives to advance</li>
+                    <li>Reach the goal score before you run out of moves to advance</li>
                 </ul>
                 <h3>Powers</h3>
                 <ul>
@@ -679,7 +670,7 @@
                     <li>&#10052; Ice &amp; &#128230; crates melt when you match beside them</li>
                     <li>&#129704; Rocks need a power or bomb blast to break!</li>
                     <li>&#128163; Countdown bombs tick down every turn&mdash;match them to defuse!</li>
-                    <li>Later levels add quota colors, &#128142; deliveries, &#128118; babies &amp; runner cats!</li>
+                    <li>Later levels add &#128142; deliveries &mdash; dig a lane clear to drop one off the board for 1000 bonus points!</li>
                 </ul>
                 <h3>Progress</h3>
                 <ul>
@@ -749,20 +740,6 @@
             '\u{1F63D}', // kissing cat
             '\u{1F640}', // weary cat
             '\u{1F63E}'  // pouting cat
-        ];
-        
-        // One solid colour per cat art index, used to make quota objectives
-        // readable on the board (tiles use photos, so a colour ring + a matching
-        // chip swatch tell the player which cat to hunt).
-        const ART_COLORS = [
-            '#e74c3c', // red
-            '#e67e22', // orange
-            '#9b59b6', // purple
-            '#2ecc71', // green
-            '#3498db', // blue
-            '#f1c40f', // yellow
-            '#e84393', // pink
-            '#1abc9c'  // teal
         ];
         
         // Custom art: drop PNGs in assets/cats/cat0.png ... cat7.png and they
@@ -885,8 +862,6 @@
             powerTargetPreview: null,
             wandSelection: null,
             reel: null,
-            runners: [],
-            babies: [],
             obj: null,
             shakeUntil: 0
         };
@@ -895,7 +870,6 @@
         function generateLevelConfigs() {
             const configs = [];
             const exitPair = (s) => [0, s - 1];
-            const quotaColor = (i, types) => (i * 7) % types;
             
             for (let i = 1; i <= 29; i++) {
                 let gridSize, numCatTypes, moves, goal, hasSpecials;
@@ -946,31 +920,48 @@
                     hasSpecials = true;
                 }
                 
-                const TYPES = numCatTypes;
-                
-                // --- Objective / blocker curve (introduced gradually) ---
+                // --- Blocker / delivery curve (introduced gradually) ---
+                // Ice, crates, rocks and bombs are obstacles, not objectives:
+                // they stand in the way and each one broken pays points.
+                // Parcels are the big payoff - clearing the lane drops one off
+                // the bottom for a large score bonus.
                 if (i === 8) objective.ice = 4;                                  // first ice
                 if (i === 9) objective.ice = 6;
-                if (i === 10) { objective.ice = 6; objective.quota = { color: quotaColor(i, TYPES), count: 12 }; }
-                if (i === 11) { objective.ice = 6; objective.quota = { color: quotaColor(i, TYPES), count: 14 }; }
-                if (i === 12) { objective.crate = 6; objective.quota = { color: quotaColor(i, TYPES), count: 16 }; }
-                if (i === 13) { objective.crate = 8; objective.quota = { color: quotaColor(i, TYPES), count: 16 }; }
-                if (i === 14) { objective.crate = 8; objective.bombs = 1; objective.bombTicks = 5; objective.quota = { color: quotaColor(i, TYPES), count: 14 }; }
-                if (i === 15) { objective.ice = 4; objective.crate = 8; objective.bombs = 2; objective.bombTicks = 4; objective.blocks = true; objective.quota = { color: quotaColor(i, TYPES), count: 12 }; }
-                if (i === 16) { objective.crate = 10; objective.bombs = 2; objective.bombTicks = 4; objective.blocks = true; }
-                if (i === 17) { objective.crate = 8; objective.rock = 4; objective.bombs = 2; objective.bombTicks = 4; objective.blocks = true; }   // first rocks
-                if (i === 18) { objective.rock = 6; objective.ingredients = 2; objective.exits = exitPair(gridSize); objective.blocks = true; }      // first deliveries
-                if (i === 19) { objective.rock = 4; objective.ingredients = 3; objective.exits = exitPair(gridSize); objective.quota = { color: quotaColor(i, TYPES), count: 16 }; objective.blocks = true; }
-                if (i === 20) { objective.ice = 6; objective.rock = 4; objective.ingredients = 3; objective.exits = exitPair(gridSize); objective.blocks = true; }
-                if (i === 21) { objective.crate = 8; objective.ingredients = 4; objective.exits = exitPair(gridSize); objective.babies = 1; }        // first babies
-                if (i === 22) { objective.ingredients = 3; objective.exits = exitPair(gridSize); objective.babies = 2; objective.quota = { color: quotaColor(i, TYPES), count: 14 }; }
-                if (i === 23) { objective.bombs = 2; objective.bombTicks = 4; objective.ingredients = 4; objective.exits = exitPair(gridSize); objective.babies = 2; objective.quota = { color: quotaColor(i, TYPES), count: 12 }; }
-                if (i === 24) { objective.ice = 6; objective.crate = 6; objective.bombs = 2; objective.bombTicks = 4; objective.babies = 3; objective.blocks = true; }
-                if (i === 25) { objective.ingredients = 3; objective.exits = exitPair(gridSize); objective.babies = 2; objective.runnerColor = 0; }   // first runner
-                if (i === 26) { objective.ice = 6; objective.bombs = 2; objective.bombTicks = 4; objective.quota = { color: quotaColor(i, TYPES), count: 18 }; objective.blocks = true; objective.runnerColor = 1; }
-                if (i === 27) { objective.ingredients = 3; objective.exits = exitPair(gridSize); objective.babies = 3; objective.runnerColor = 2; }
-                if (i === 28) { objective.ingredients = 4; objective.exits = exitPair(gridSize); objective.bombs = 2; objective.bombTicks = 4; objective.quota = { color: quotaColor(i, TYPES), count: 16 }; objective.runnerColor = 0; }
-                if (i === 29) { objective.rock = 4; objective.crate = 6; objective.bombs = 2; objective.bombTicks = 5; objective.blocks = true; objective.quota = { color: quotaColor(i, TYPES), count: 20 }; objective.runnerColor = 1; }
+                if (i === 10) objective.ice = 6;
+                if (i === 11) objective.ice = 6;
+                if (i === 12) objective.crate = 6;
+                if (i === 13) objective.crate = 8;
+                if (i === 14) { objective.crate = 8; objective.bombs = 1; objective.bombTicks = 5; }
+                if (i === 15) { objective.ice = 4; objective.crate = 8; objective.bombs = 2; objective.bombTicks = 4; }
+                if (i === 16) { objective.crate = 10; objective.bombs = 2; objective.bombTicks = 4; }
+                if (i === 17) { objective.crate = 8; objective.rock = 4; objective.bombs = 2; objective.bombTicks = 4; }   // first rocks
+                if (i === 18) { objective.rock = 6; objective.ingredients = 2; objective.exits = exitPair(gridSize); }      // first deliveries
+                if (i === 19) { objective.rock = 4; objective.ingredients = 3; objective.exits = exitPair(gridSize); }
+                if (i === 20) { objective.ice = 6; objective.rock = 4; objective.ingredients = 3; objective.exits = exitPair(gridSize); }
+                if (i === 21) { objective.crate = 8; objective.ingredients = 4; objective.exits = exitPair(gridSize); }
+                if (i === 22) { objective.ingredients = 3; objective.exits = exitPair(gridSize); }
+                if (i === 23) { objective.bombs = 2; objective.bombTicks = 4; objective.ingredients = 4; objective.exits = exitPair(gridSize); }
+                if (i === 24) { objective.ice = 6; objective.crate = 6; objective.bombs = 2; objective.bombTicks = 4; }
+                if (i === 25) { objective.ingredients = 3; objective.exits = exitPair(gridSize); }
+                if (i === 26) { objective.ice = 6; objective.bombs = 2; objective.bombTicks = 4; }
+                if (i === 27) { objective.ingredients = 3; objective.exits = exitPair(gridSize); }
+                if (i === 28) { objective.ingredients = 4; objective.exits = exitPair(gridSize); objective.bombs = 2; objective.bombTicks = 4; }
+                if (i === 29) {
+                    // The boss used to demand clear-every-blocker, a 20 cat
+                    // quota AND a finished runner on top of its goal. With only
+                    // points left to chase, its old 3000 would have made the
+                    // finale easier than level 28.
+                    objective.rock = 4; objective.crate = 6; objective.bombs = 2; objective.bombTicks = 5;
+                    goal = 5000;
+                }
+                
+                // A parcel level used to have to clear its deliveries as a
+                // separate objective. It doesn't any more - delivering is now
+                // optional but pays DELIVERY_POINTS a pop - so the goal carries
+                // half of that payout per parcel to keep the level demanding.
+                // Deliberately only half: a level should still be clearable by
+                // matching well alone, with deliveries as the bonus route.
+                goal += (objective.ingredients || 0) * (DELIVERY_POINTS / 2);
                 
                 const config = {
                     level: i,
@@ -988,34 +979,22 @@
                 config.rock = config.rock || 0;
                 config.bombs = config.bombs || 0;
                 config.bombTicks = config.bombTicks || 4;
-                config.blocks = !!config.blocks;
                 config.objective = config.objective || null;
                 configs.push(config);
             }
             return configs;
         }
         
-        // Share the objective details onto a level config
+        // Share the level's blockers and delivery parcels onto a level config
         function configurationBlockers(config, objective) {
             config.ice = objective.ice || 0;
             config.crate = objective.crate || 0;
             config.rock = objective.rock || 0;
             config.bombs = objective.bombs || 0;
             config.bombTicks = objective.bombTicks || 4;
-            config.blocks = !!objective.blocks;
-            config.objective = objectKeys(objective);
-            if (objective.runnerColor !== undefined) config.runnerColor = objective.runnerColor;
-        }
-        
-        // Build the per-level objective tracker from a config's raw objective object
-        function objectKeys(objective) {
-            return {
-                quota: objective.quota || null,
+            config.objective = {
                 ingredients: objective.ingredients || 0,
-                exits: objective.exits || [],
-                babies: objective.babies || 0,
-                runnerColor: objective.runnerColor !== undefined ? objective.runnerColor : null,
-                blocks: !!objective.blocks
+                exits: objective.exits || []
             };
         }
         
@@ -1051,6 +1030,10 @@
         const MUSIC_PREF_KEY = 'meowMatchMusic';
         const MUSIC_STEP = 0.3;          // one eighth note at 100 BPM
         const MUSIC_STEPS = 32;          // 4 bars of 8 eighth notes
+        
+        // Points for handing over one delivery parcel. A plain match is worth
+        // 10 per cat, so this is deliberately worth about a hundred cats.
+        const DELIVERY_POINTS = 1000;
 
         const music = {
             enabled: true,
@@ -1563,15 +1546,13 @@
             const maxWidthFinal = Math.max(200, Math.min(maxWidth, availHeight));
             
             // Internal resolution scaled for retina displays
-            game.laneH = levelHasRunner() ? 30 : 0;
             const boardPx = maxWidthFinal;
-            const totalH = boardPx + game.laneH;
             game.canvas.width = Math.round(boardPx * dpr);
-            game.canvas.height = Math.round(totalH * dpr);
+            game.canvas.height = Math.round(boardPx * dpr);
             
             // CSS size in logical pixels
             game.canvas.style.width = boardPx + 'px';
-            game.canvas.style.height = totalH + 'px';
+            game.canvas.style.height = boardPx + 'px';
             
             game.tileSize = maxWidthFinal / game.gridSize;
             game.dpr = dpr;
@@ -1589,13 +1570,6 @@
                     }
                 }
             }
-        }
-        
-        // Whether the current level has a runner/courier objective (which adds a
-        // delivery lane strip below the board)
-        function levelHasRunner() {
-            const config = game.levelConfigs && game.levelConfigs[game.currentLevel - 1];
-            return !!config && !!(config.runnerColor !== undefined && config.runnerColor !== null);
         }
         
         function loadLevel(level) {
@@ -1634,7 +1608,6 @@
             generateGrid(config.numCatTypes);
             removeInitialMatches(config.numCatTypes);
             applyLevelDecor(config);
-            ensureQuotaSupply();
             
             updateUI();
             updatePowerUI();
@@ -1664,42 +1637,26 @@
             };
         }
         
-        // Scatter the current level's blockers, bombs, ingredients, babies and runner
-        // onto a fresh board according to its config. With keepProgress true the
-        // in-progress objective counters survive (used by the slot replay).
+        // Scatter the current level's blockers, bombs and parcels onto a fresh
+        // board according to its config. With keepProgress true the delivery
+        // counter survives (used by the slot replay).
         function applyLevelDecor(config, keepProgress) {
-            game.runners = [];
-            game.babies = [];
-            
             const oldProgress = (game.obj && keepProgress) ? {
-                quotaProgress: game.obj.quotaProgress,
                 ingredientsCollected: game.obj.ingredientsCollected
             } : null;
             
             game.obj = {
-                quotaColor: null,
-                quotaTarget: 0,
-                quotaProgress: 0,
                 ingredientsTarget: 0,
                 ingredientsCollected: 0,
-                babiesTarget: 0,
-                runnerCount: 0,
-                blocksTarget: 0,
                 exits: []
             };
             
             const deco = config.objective || {};
             
-            if (deco.quota) {
-                game.obj.quotaColor = deco.quota.color % config.numCatTypes;
-                game.obj.quotaTarget = deco.quota.count;
-            }
             game.obj.ingredientsTarget = deco.ingredients || 0;
             game.obj.exits = deco.exits || [];
-            game.obj.babiesTarget = deco.babies || 0;
             
             if (oldProgress) {
-                game.obj.quotaProgress = Math.min(game.obj.quotaTarget, oldProgress.quotaProgress);
                 game.obj.ingredientsCollected = Math.min(game.obj.ingredientsTarget, oldProgress.ingredientsCollected);
             }
             
@@ -1713,7 +1670,6 @@
                         if (t.type < 0) continue;
                         if (t.ice > 0 || t.crate > 0 || t.rock) continue;
                         if (t.ingredient === 1) continue;
-                        if (opts && opts.noBottomRow && r === game.gridSize - 1) continue;
                         // Delivery lanes stay clear so a parcel always has a
                         // path to the bottom row
                         if (opts && exits.indexOf(c) !== -1 && opts.noLaneAtAll) continue;
@@ -1772,35 +1728,6 @@
                     }
                 }
             }
-            
-            // Baby riders (skip the bottom row)
-            if (deco.babies) {
-                for (let i = 0; i < deco.babies; i++) {
-                    const arr = freeCells({ noBottomRow: true });
-                    if (!arr.length) break;
-                    const chosen = arr[Math.floor(Math.random() * arr.length)];
-                    game.babies.push({
-                        row: chosen.row,
-                        col: chosen.col,
-                        color: Math.floor(Math.random() * config.numCatTypes),
-                        done: false
-                    });
-                }
-            }
-            
-            // Runner / delivery cat in the lane below the board
-            if (deco.runnerColor !== undefined && deco.runnerColor !== null) {
-                game.runners.push({
-                    color: deco.runnerColor % config.numCatTypes,
-                    steps: 0,
-                    maxSteps: 9,
-                    done: false
-                });
-            }
-            game.obj.runnerCount = game.runners.length;
-            
-            // "Clear the blockers" objective: how many blockers sit on the board
-            game.obj.blocksTarget = (config.blocks && countBlockers()) || 0;
         }
         
         function resetPowers() {
@@ -2409,11 +2336,6 @@
             // Box shatters any blockers in its radius too
             breakBlockersInRadius(row, col, 3);
             
-            // Collecting the quota colour packs it toward the objective
-            if (targetType === (game.obj && game.obj.quotaColor)) {
-                creditQuotaColor(affected.length);
-            }
-            
             // Celebration: the box drops in and every affected cat leaps into it
             sfxBox();
             await animateBoxCollect(row, col, affected);
@@ -2431,19 +2353,19 @@
             await resolveCascade();
         }
         
-        // Tuna power: remove all cats within Manhattan distance 2 of (row,col)
-        // Tuna blast radius membership (quota cats are spared; ingredients and empty
-        // cells are never lured), so the animation and the raid stay in sync and
-        // it is easy to assert which tiles a blast will hit.
+        // Tuna blast radius membership: every cat within Manhattan distance 2 of
+        // (row, col), except dug-up parcels and empty cells, which are never
+        // lured. Exposed so the animation and the raid stay in sync and it is
+        // easy to assert which tiles a blast will hit.
         function tunaAffected(row, col) {
             const affected = [];
             for (let r = 0; r < game.gridSize; r++) {
                 for (let c = 0; c < game.gridSize; c++) {
                     const t = game.grid[r][c];
-                    // Tuna lures cats but never dug-up ingredients, empty cells,
-                    // or the quota colour (those stay matchable)
+                    // Tuna lures cats but never dug-up ingredients
+                    // or empty cells (those stay matchable)
                     if (Math.abs(r - row) + Math.abs(c - col) <= 2 &&
-                        t.type !== -1 && t.ingredient !== 1 && !isQuotaProtected(t)) {
+                        t.type !== -1 && t.ingredient !== 1) {
                         affected.push({ row: r, col: c });
                     }
                 }
@@ -2490,11 +2412,9 @@
             const config = game.levelConfigs[game.currentLevel - 1];
             generateGrid(config.numCatTypes);
             removeInitialMatches(config.numCatTypes);
-            // Re-scatter this level's blockers/bombs/ingredients/babies so the
-            // fresh board still matches its objectives (keep progress counters)
+            // Re-scatter this level's blockers/bombs/parcels onto the fresh board
+            // (keep the delivery counter)
             applyLevelDecor(config, true);
-            // The new board must still carry the quota colour to match
-            ensureQuotaSupply();
             
             await animateSlotSpin(config.numCatTypes);
             
@@ -2753,143 +2673,6 @@
             return false;
         }
         
-        // Colour quota: matched cats of the required colour add to the tally
-        function addToQuota(matches) {
-            if (!game.obj || !game.obj.quotaTarget) return;
-            let add = 0;
-            for (const m of matches) {
-                if (game.grid[m.row][m.col].type === game.obj.quotaColor) add++;
-            }
-            if (add) {
-                game.obj.quotaProgress = Math.min(game.obj.quotaTarget, game.obj.quotaProgress + add);
-            }
-        }
-        
-        // Whether a tile is a quota-colour cat that powers should preserve
-        function isQuotaProtected(t) {
-            return !!(t && game.obj && game.obj.quotaTarget > 0 &&
-                game.obj.quotaColor !== null && game.obj.quotaColor >= 0 &&
-                t.type === game.obj.quotaColor);
-        }
-        
-        // Count cats of the quota colour "collected" by a power toward the quota
-        function creditQuotaColor(count) {
-            if (!count || !game.obj || !game.obj.quotaTarget || game.obj.quotaColor === null) return 0;
-            const before = game.obj.quotaProgress;
-            game.obj.quotaProgress = Math.min(game.obj.quotaTarget, game.obj.quotaProgress + count);
-            return game.obj.quotaProgress - before;
-        }
-        
-        function isMatchableCell(r, c) {
-            const t = game.grid[r][c];
-            return !!t && t.type >= 0 && !t.ice && !t.crate && !t.rock;
-        }
-        
-        // Would placing the cell's current type here create a 3-in-a-row?
-        function formsRun(r, c) {
-            const type = game.grid[r][c].type;
-            let h = 1;
-            for (let d = 1; c - d >= 0 && isMatchableCell(r, c - d) && game.grid[r][c - d].type === type; d++) h++;
-            for (let d = 1; c + d < game.gridSize && isMatchableCell(r, c + d) && game.grid[r][c + d].type === type; d++) h++;
-            if (h >= 3) return true;
-            let v = 1;
-            for (let d = 1; r - d >= 0 && isMatchableCell(r - d, c) && game.grid[r - d][c].type === type; d++) v++;
-            for (let d = 1; r + d < game.gridSize && isMatchableCell(r + d, c) && game.grid[r + d][c].type === type; d++) v++;
-            return v >= 3;
-        }
-        
-        // Guarantee the board still carries a workable supply of the quota
-        // colour (used after the slot reshuffle and on level load) by quietly
-        // converting a few safe cells - never creating an instant match.
-        function ensureQuotaSupply() {
-            const o = game.obj;
-            if (!o || !o.quotaTarget || o.quotaColor === null) return;
-            const needed = Math.max(2, Math.ceil(o.quotaTarget / 4));
-            const quota = o.quotaColor;
-            let have = 0;
-            for (let r = 0; r < game.gridSize; r++) {
-                for (let c = 0; c < game.gridSize; c++) {
-                    const t = game.grid[r][c];
-                    if (t.type === quota && isMatchableCell(r, c) && t.ingredient !== 1) have++;
-                }
-            }
-            if (have >= needed) return;
-            
-            let attempts = 0;
-            while (have < needed && attempts < 400) {
-                attempts++;
-                const r = Math.floor(Math.random() * game.gridSize);
-                const c = Math.floor(Math.random() * game.gridSize);
-                if (!isMatchableCell(r, c)) continue;
-                const t = game.grid[r][c];
-                if (t.type === quota || t.ingredient === 1 || r * 3 + c === 0) continue;
-                const old = t.type;
-                t.type = quota;
-                if (formsRun(r, c)) {
-                    t.type = old;
-                    continue;
-                }
-                have++;
-            }
-        }
-        
-        // Runner (delivery cat): each match of its colour moves it along the lane
-        function advanceRunners(groups) {
-            if (!game.runners.length || !groups) return;
-            for (const runner of game.runners) {
-                if (runner.done) continue;
-                let steps = 0;
-                for (const g of groups) {
-                    if (g.type === runner.color) {
-                        if (g.length >= 6) steps += 4;
-                        else if (g.length >= 5) steps += 3;
-                        else if (g.length >= 4) steps += 2;
-                        else steps += 1;
-                    }
-                }
-                if (steps) {
-                    runner.steps = Math.min(runner.maxSteps, runner.steps + steps);
-                    if (runner.steps >= runner.maxSteps) runner.done = true;
-                }
-            }
-        }
-        
-        // Baby cat: hops one row down whenever its colour matches in its row/col
-        function hopBabies(groups) {
-            if (!game.babies.length || !groups) return;
-            for (const baby of game.babies) {
-                if (baby.done) continue;
-                const hit = groups.some(g =>
-                    g.type === baby.color &&
-                    g.cells.some(c => c.row === baby.row || c.col === baby.col)
-                );
-                if (hit) {
-                    baby.row = Math.min(game.gridSize - 1, baby.row + 1);
-                    if (baby.row >= game.gridSize - 1) {
-                        baby.done = true;
-                        createParticles(
-                            baby.col * game.tileSize + game.tileSize / 2,
-                            (game.gridSize - 1) * game.tileSize + game.tileSize / 2,
-                            '\u{1F63D}',
-                            baby.color
-                        );
-                    }
-                }
-            }
-        }
-        
-        // Count remaining blocker tiles on the board (ice/crate/rock)
-        function countBlockers() {
-            let n = 0;
-            for (let r = 0; r < game.gridSize; r++) {
-                for (let c = 0; c < game.gridSize; c++) {
-                    const t = game.grid[r][c];
-                    if (t.ice > 0 || t.crate > 0 || t.rock) n++;
-                }
-            }
-            return n;
-        }
-        
         // Parcels need no movement code of their own. A parcel is a solid tile,
         // so ordinary gravity already carries it: match the cat directly
         // underneath and the hole you open lets the parcel drop into it. That
@@ -2900,6 +2683,10 @@
         // Delivery parcels drop off the bottom row. Any column works - the exit
         // columns are only the highlighted guide lane - so a parcel nudged out
         // of the lane still gets delivered instead of sitting there forever.
+        
+        // A delivery is the hardest thing to pull off in the game - you have to
+        // dig a lane clean all the way to the bottom row - so it pays far more
+        // than any match. It is the main route to a high score on a parcel level.
         function collectIngredients() {
             let collected = 0;
             const lastRow = game.gridSize - 1;
@@ -2912,7 +2699,7 @@
                         game.obj.ingredientsTarget,
                         game.obj.ingredientsCollected + 1
                     );
-                    game.score += 250;
+                    game.score += DELIVERY_POINTS;
                     createParticles(
                         col * game.tileSize + game.tileSize / 2,
                         lastRow * game.tileSize + game.tileSize / 2,
@@ -2980,8 +2767,6 @@
                 const [r, c] = key.split(',').map(Number);
                 const t = game.grid[r][c];
                 if (t.type === -1) return;
-                // Never delete the tile a baby is riding (babies can't die)
-                if (game.babies.some(b => !b.done && b.row === r && b.col === c)) return;
                 t.type = -1;
                 t.ice = 0;
                 t.crate = 0;
@@ -3056,8 +2841,8 @@
             return moves;
         }
         
-        // Re-roll the cat colours in place. Decor (ice/crate/rock/bombs), parcels,
-        // babies, runners and objective progress all stay exactly where they are.
+        // Re-roll the cat colours in place. Decor (ice/crate/rock/bombs),
+        // parcels and the delivery count all stay exactly where they are.
         function reshuffleBoard() {
             const config = game.levelConfigs[game.currentLevel - 1];
             for (let r = 0; r < game.gridSize; r++) {
@@ -3067,7 +2852,6 @@
                 }
             }
             removeInitialMatches(config.numCatTypes);
-            ensureQuotaSupply();
         }
         
         // A level must never hand the player a board where nothing can be matched:
@@ -3086,17 +2870,6 @@
                 showBoardNotice('\u{1F504} No matching moves left - reshuffling the cats!');
             }
             return reshuffled;
-        }
-        
-        // Whether every objective of the current level is fulfilled
-        function objectivesDone() {
-            if (!game.obj) return true;
-            if (game.obj.quotaTarget > 0 && game.obj.quotaProgress < game.obj.quotaTarget) return false;
-            if (game.obj.ingredientsTarget > 0 && game.obj.ingredientsCollected < game.obj.ingredientsTarget) return false;
-            if (game.obj.babiesTarget > 0 && !game.babies.every(b => b.done)) return false;
-            if (game.runners.length > 0 && !game.runners.every(r => r.done)) return false;
-            if (game.obj.blocksTarget > 0 && countBlockers() > 0) return false;
-            return true;
         }
         
         async function processMatches(matches, groups, awardsDisabled) {
@@ -3127,11 +2900,8 @@
                 updatePowerUI();
             }
             
-            // Objective side-effects of the match (blocker chips, quota, delivery)
+            // Side-effects of the match (blocker chips and delivery drops)
             chipBlockers(matches);
-            addToQuota(matches);
-            advanceRunners(groups);
-            hopBabies(groups);
             
             // Create particles for each matched cat
             matches.forEach(match => {
@@ -3731,7 +3501,9 @@
         }
         
         function checkGameState() {
-            if (game.score >= game.goalScore && objectivesDone()) {
+            // Points are the only win condition. Blockers, bombs and parcels
+            // are obstacles and bonuses, never separate things to finish.
+            if (game.score >= game.goalScore) {
                 updateChips();
                 setTimeout(() => showLevelComplete(), 300);
                 return;
@@ -3756,30 +3528,17 @@
             // Already on screen: never stack the warning
             if (overlay.classList.contains('hidden') === false) return;
             
-            // Remind the player what is still outstanding, so the warning is
+            // Remind the player how far off the score goal they are, so the warning is
             // actionable rather than just a countdown
-            const remaining = objectiveReport();
             const remainder = document.getElementById('lowMovesRemainder');
             if (remainder) {
-                remainder.innerHTML = (game.score < game.goalScore)
-                    ? `Score: ${game.score} of ${game.goalScore}`
-                    : `Score goal met - objectives left: ${remaining.replace(/^  \(/, '').replace(/\)$/, '')}`;
+                const short = Math.max(game.goalScore - game.score, 0);
+                remainder.innerHTML = short > 0
+                    ? `Score: ${game.score} of ${game.goalScore} - ${short} to go`
+                    : `Score goal met!`;
             }
             
             overlay.classList.remove('hidden');
-        }
-        
-        // Human-readable summary of the level's objectives and their status
-        function objectiveReport() {
-            const o = game.obj;
-            if (!o) return '';
-            const bits = [];
-            if (o.quotaTarget > 0) bits.push(`quota ${o.quotaProgress}/${o.quotaTarget}`);
-            if (o.ingredientsTarget > 0) bits.push(`deliveries ${o.ingredientsCollected}/${o.ingredientsTarget}`);
-            if (o.babiesTarget > 0) bits.push(`babies ${game.babies.filter(b => b.done).length}/${o.babiesTarget}`);
-            if (o.runnerCount > 0) bits.push(`runner ${game.runners.filter(r => r.done).length}/${o.runnerCount}`);
-            if (o.blocksTarget > 0) bits.push(`blockers ${countBlockers()}/${o.blocksTarget}`);
-            return bits.length ? '  (' + bits.join(', ') + ')' : '';
         }
         
         function showLevelComplete() {
@@ -3812,7 +3571,7 @@
                 nextBtn.textContent = '\u{1F479} Fight the Boss!';
             } else {
                 title.textContent = 'Level Complete!';
-                message.textContent = `Great job completing Level ${game.currentLevel}!${objectiveReport()}`;
+                message.textContent = `Great job completing Level ${game.currentLevel}!`;
                 emoji.textContent = '\u{1F63A} \u{1F63B} \u{1F638}';
                 nextBtn.textContent = 'Next Level';
             }
@@ -3847,10 +3606,10 @@
             // Short descending sting, in place of the background music
             sfxGameOver();
             const p = document.querySelector('#gameOverOverlay p');
-            const remaining = objectiveReport();
+            const short = game.goalScore - game.score;
             if (p) {
-                p.textContent = remaining
-                    ? `So close! You still need ${remaining.replace(/^  \(/, '').replace(/\)$/, '')}. Give it another go!`
+                p.textContent = short > 0
+                    ? `So close! You needed ${game.goalScore} points and reached ${game.score}. Give it another go!`
                     : "Don't give up! Try again!";
             }
         }
@@ -3890,14 +3649,10 @@
         // something new explains it instead of leaving the player guessing
         const NEW_ELEMENT_NOTES = {
             8:  '\u{1F9CA} NEW - ICE! Match a line of cats beside a frosted tile to chip the ice away.',
-            10: 'NEW - QUOTA! The color with the pulsing ring is this level\u2019s quota. Keep matching it until the counter fills.',
             12: '\u{1F4E6} NEW - CRATES! Match right next to a crate to crack it open.',
             14: '\u{1F4A3} NEW - COUNTDOWN BOMBS! The number counts the turns until it explodes and blows up the tiles around it. Match the bomb to defuse it.',
-            15: 'NEW - CLEAR EVERY BLOCKER! All the ice, crates and rocks must be gone to clear the level.',
             17: '\u{1FAA8} NEW - ROCKS! Only a power blast or a bomb can break a rock.',
-            18: '\u{1F48E} NEW - DELIVERIES! Clear the cats under a parcel and it drops off the bottom of the board.',
-            21: '\u{1F63D} NEW - BABY CATS! Match their color in their row or column to hop them down to safety.',
-            25: '\u{1F3C1} NEW - RUNNER! Match the runner\u2019s color to sprint it along the lane to the finish.'
+            18: '\u{1F48E} NEW - DELIVERIES! Clear the cats under a parcel and it drops off the bottom of the board for 1000 bonus points!'
         };
         
         function updateUI() {
@@ -3926,28 +3681,17 @@
             progressFill.style.width = `${progress}%`;
         }
         
-        // Build the little objective chips that appear under the progress bar
+        // Build the little chips under the progress bar. Deliveries are not a
+        // separate objective, but counting them out is worth showing since each
+        // one is a big chunk of the score goal.
         function updateChips() {
             const chips = document.getElementById('objChips');
             if (!chips) return;
             const o = game.obj;
             const parts = [];
             
-            if (o && o.quotaTarget > 0 && o.quotaColor !== null) {
-                const color = ART_COLORS[o.quotaColor % ART_COLORS.length];
-                parts.push(`<span class="quota-dot" style="background:${color}"></span> quota ${o.quotaProgress}/${o.quotaTarget}`);
-            }
             if (o && o.ingredientsTarget > 0) {
-                parts.push(`\u{1F48E} ${o.ingredientsCollected}/${o.ingredientsTarget}`);
-            }
-            if (o && o.babiesTarget > 0) {
-                parts.push(`\u{1F63D} ${game.babies.filter(b => b.done).length}/${o.babiesTarget}`);
-            }
-            if (game.runners.length > 0) {
-                parts.push(`\u{1F3C1} ${game.runners.filter(r => r.done).length}/${game.runners.length}`);
-            }
-            if (o && o.blocksTarget > 0) {
-                parts.push(`\u{2696} ${countBlockers()}/${o.blocksTarget}`);
+                parts.push(`\u{1F48E} ${o.ingredientsCollected}/${o.ingredientsTarget} delivered`);
             }
             
             chips.innerHTML = parts.length ? parts.join('  ') : '';
@@ -4021,7 +3765,7 @@ function drawIceOverlay(cx, cy, s, layers) {
             ctx.restore();
         }
         
-        // Wrapped delivery (the collection objective)
+        // Wrapped delivery parcel
         function drawIngredientSprite(cx, cy, size) {
             const ctx = game.ctx;
             ctx.save();
@@ -4098,10 +3842,6 @@ function drawIceOverlay(cx, cy, s, layers) {
             const canvas = game.canvas;
             const now = Date.now();
             
-            // The colour cats a level needs matched (photo tiles need a hint)
-            const quotaColor = (game.obj && game.obj.quotaTarget > 0 && game.obj.quotaColor !== null)
-                ? game.obj.quotaColor : -1;
-            
             // Scale context for retina displays (all coords stay in CSS pixels)
             ctx.setTransform((game.dpr || 1), 0, 0, (game.dpr || 1), 0, 0);
             ctx.clearRect(0, 0, canvas.width / (game.dpr || 1), canvas.height / (game.dpr || 1));
@@ -4117,47 +3857,6 @@ function drawIceOverlay(cx, cy, s, layers) {
             const cssHeight = canvas.height / (game.dpr || 1);
             ctx.fillStyle = '#f0f0f0';
             ctx.fillRect(-6, -6, cssWidth + 12, cssHeight + 12);
-            
-            // Runner delivery lane below the board
-            if (game.laneH > 0) {
-                ctx.fillStyle = '#fbe3c2';
-                ctx.fillRect(0, cssWidth, cssWidth, game.laneH);
-                ctx.strokeStyle = '#d9a05b';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(0, cssWidth, cssWidth, game.laneH);
-                
-                ctx.font = `${Math.round(game.laneH * 0.8)}px sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillStyle = '#6b4423';
-                const laneY = cssWidth + game.laneH / 2;
-                ctx.fillText('\u{1F6A9}', 16, laneY);
-                ctx.fillText('\u{1F3C1}', cssWidth - 18, laneY);
-                
-                // Lane track
-                ctx.fillStyle = '#8d5a2b';
-                ctx.fillRect(30, laneY - 1.5, cssWidth - 60, 3);
-                
-                // Runner cats
-                game.runners.forEach(runner => {
-                    const xStart = 34, xEnd = cssWidth - 36;
-                    const px = xStart + (runner.steps / runner.maxSteps) * (xEnd - xStart);
-                    const py = laneY;
-                    ctx.fillStyle = '#fff';
-                    ctx.beginPath();
-                    ctx.arc(px, py, game.tileSize * 0.34, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.strokeStyle = runner.done ? '#2ecc71' : '#bbb';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    drawTileArt(runner.color, px, py, game.tileSize * 0.52, 1);
-                    if (runner.done) {
-                        ctx.font = `12px sans-serif`;
-                        ctx.fillStyle = '#27ae60';
-                        ctx.fillText('\u{2714}', px, py - game.tileSize * 0.42);
-                    }
-                });
-            }
             
             // Draw tiles
             for (let row = 0; row < game.gridSize; row++) {
@@ -4236,26 +3935,6 @@ function drawIceOverlay(cx, cy, s, layers) {
                     if (tile.ice > 0) {
                         drawIceOverlay(tile.x + game.tileSize / 2, tile.y + game.tileSize / 2, game.tileSize, tile.ice);
                     }
-                    
-                    // Quota target: ring this colour so it stands out on photo
-                    // tiles (pulses gently so it reads as "collect me")
-                    if (quotaColor >= 0 && tile.type === quotaColor &&
-                        !tile.rock && tile.ingredient !== 1 && tile.ice === 0 && tile.crate === 0) {
-                        const accent = ART_COLORS[tile.type % ART_COLORS.length];
-                        const pulse = 0.5 + 0.5 * Math.sin(now / 300 + tile.type * 1.7);
-                        ctx.strokeStyle = accent;
-                        ctx.lineWidth = 2.5 + pulse * 2;
-                        ctx.strokeRect(
-                            col * game.tileSize + 3,
-                            row * game.tileSize + 3,
-                            game.tileSize - 6,
-                            game.tileSize - 6
-                        );
-                        ctx.fillStyle = accent;
-                        ctx.beginPath();
-                        ctx.arc(col * game.tileSize + 9, row * game.tileSize + 9, 3 + pulse * 1.5, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
                 }
             }
             
@@ -4270,25 +3949,6 @@ function drawIceOverlay(cx, cy, s, layers) {
                 ctx.lineTo(bx, by + 4);
                 ctx.closePath();
                 ctx.fill();
-            });
-            
-            // Baby riders (drawn above their tiles, gently bobbing)
-            const bob = now / 260;
-            game.babies.forEach(baby => {
-                if (baby.done) return;
-                const cx = baby.col * game.tileSize + game.tileSize / 2;
-                const cy = (baby.row + 1) * game.tileSize - game.tileSize * 0.16 -
-                    Math.abs(Math.sin(bob + baby.col * 0.8)) * game.tileSize * 0.06;
-                ctx.fillStyle = '#fff';
-                ctx.beginPath();
-                ctx.arc(cx, cy - game.tileSize * 0.22, game.tileSize * 0.12, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = '#ff6b81';
-                ctx.font = `${Math.round(game.tileSize * 0.16)}px sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('\u{2764}', cx, cy - game.tileSize * 0.22);
-                drawTileArt(baby.color, cx, cy, game.tileSize * 0.55, 1);
             });
             
             // Draw particles

@@ -11,11 +11,14 @@ Hosted on GitHub Pages: **<your-username>.github.io/matching_cats** once you pus
 
 - Tap two adjacent cats (or swipe) to swap them
 - Match 3+ identical cats to score points
-- Reach the goal score before you run out of moves to advance
-- Some levels ask for deliveries: parcels ride the highlighted lane down and
-  are handed over at the bottom of the board, for 250 points each. A parcel only
-  moves when you clear the space beneath it, so deliveries are about working
-  your way down the lane
+- Reach the goal score before you run out of moves to advance — points are the
+  only win condition, so match freely and take whatever scores come
+- Ice, crates, rocks and bombs are obstacles, not tasks: break them for bonus
+  points whenever it's convenient
+- Some levels have parcels riding the highlighted lane. Clear the cats beneath
+  one and it drops off the bottom of the board for **1000 points** — a big chunk
+  of most level goals, since digging a lane all the way down is the hardest
+  thing in the game. Delivering is always optional, never required
 
 ## Powers
 
