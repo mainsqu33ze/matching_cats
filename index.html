@@ -153,17 +153,6 @@
             text-align: center;
         }
         
-        .footer-btns {
-            display: flex;
-            gap: 10px;
-            margin-top: 12px;
-        }
-        
-        .footer-btns .btn {
-            margin-top: 0;
-            flex: 1;
-        }
-        
         .progress-bar {
             height: 12px;
             background: #e0e0e0;
@@ -446,8 +435,38 @@
             border-color: #999;
             color: #999;
         }
+
+        /* ---- Exit (back to the menu) ----
+           A single close button anchored to the header's top-left, mirroring
+           the music toggle on the right. This replaced a "New Game" + "Exit"
+           footer row; the footer cost ~40px of vertical chrome that setupCanvas
+           subtracts from the board, so dropping it gives the board more room. */
+        .exit-btn {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid #e74c3c;
+            background: rgba(255, 255, 255, 0.92);
+            color: #e74c3c;
+            font-size: 1.5em;
+            line-height: 1;
+            font-weight: bold;
+            padding: 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .exit-btn:active {
+            transform: scale(0.92);
+        }
         
-        /* Keep the centred title clear of the toggle */
+        /* Keep the centred title clear of the close (left) and music (right) buttons */
         .header h1 {
             padding: 0 46px;
         }
@@ -578,9 +597,6 @@
             #objChips:not(:empty) {
                 padding: 3px 6px;
             }
-            .footer-btns {
-                margin-top: 8px;
-            }
         }
     </style>
 </head>
@@ -589,6 +605,7 @@
         <div class="header">
             <h1>&#128049; Meow Match &#128049;</h1>
             <div class="subtitle">29 Levels for 29 Years of Amazing!</div>
+            <button class="exit-btn" id="exitBtn" type="button" aria-label="Exit to main menu" title="Exit to main menu">&#10005;</button>
             <button class="music-btn" id="musicBtn" type="button" aria-pressed="true" aria-label="Turn background music off" title="Background music">&#9834;</button>
         </div>
         
@@ -633,10 +650,6 @@
             <div id="objChips"></div>
         </div>
         
-        <div class="footer-btns">
-            <button class="btn" id="newGameBtn">New Game</button>
-            <button class="btn ghost" id="exitBtn" type="button">Exit</button>
-        </div>
     </div>
     
     <div class="overlay" id="welcomeOverlay">
@@ -645,6 +658,7 @@
             <div class="cats-preview">&#128049; &#128570; &#128568;</div>
             <p>Match 3 or more cats in a row to score points&mdash;the bigger the chain, the bigger the payoff!</p>
             <button class="btn" id="startBtn">Start Playing!</button>
+            <button class="btn ghost hidden" id="newGameBtn" type="button">&#127881; Start New Game</button>
             <button class="btn ghost" id="aboutGameBtn" type="button">&#128214; About the Game</button>
             <button class="btn hidden" id="resumeSaveBtn"></button>
             <button class="music-btn static" id="musicBtnMenu" type="button" aria-pressed="true" aria-label="Turn background music off" title="Background music">&#9834;</button>
@@ -1633,7 +1647,7 @@
             };
             const chromeTop = heightOf('.header') + heightOf('.stats-bar') +
                 heightOf('#bossBanner') + heightOf('#powersBar');
-            const chromeBottom = heightOf('.level-progress') + heightOf('.footer-btns');
+            const chromeBottom = heightOf('.level-progress');
             const containerTop = (container.getBoundingClientRect && container.getBoundingClientRect().top) || 0;
             const availHeight = Math.max(180, (window.innerHeight || 800) - containerTop - chromeTop - chromeBottom - 24);
             
@@ -1942,6 +1956,18 @@
                 document.removeEventListener('pointerdown', onFirstGesture);
             };
             document.addEventListener('pointerdown', onFirstGesture);
+
+            // Tapping anywhere off the board cancels an armed power. The canvas
+            // is sized exactly to the grid, so its own handlers can never see
+            // an off-board tap - this is the only place that can. Clicks on the
+            // power buttons are excluded so arming still works.
+            document.addEventListener('pointerdown', (e) => {
+                if (game.isAnimating) return;
+                if (!game.activePower && !game.wandSelection) return;
+                if (e.target === game.canvas) return;
+                if (e.target.closest && e.target.closest('#powersBar')) return;
+                disarmPower();
+            });
             
             // Don't play into the void: pause when the tab is hidden or the
             // phone is backgrounded, and pick back up when it returns
@@ -1967,14 +1993,22 @@
                 toggleAbout(false);
             });
             
-            document.getElementById('newGameBtn').addEventListener('click', () => {
-                sfxStopGameOver();
-                game.currentLevel = 1;
-                game.totalScore = 0;
-                resetPowers();
-                loadLevel(1);
-            });
-            
+            // New Game lives on the welcome screen, not the board. Restarting
+            // from mid-run silently threw away progress, and it cost ~40px of
+            // vertical chrome on every level just to sit on the board.
+            const newGameBtnMenu = document.getElementById('newGameBtn');
+            if (newGameBtnMenu) {
+                newGameBtnMenu.addEventListener('click', () => {
+                    sfxStopGameOver();
+                    document.getElementById('welcomeOverlay').classList.add('hidden');
+                    game.currentLevel = 1;
+                    game.totalScore = 0;
+                    resetPowers();
+                    loadLevel(1);
+                    if (music.enabled) startMusic();
+                });
+            }
+
             // Exit back to the menu: prefill the welcome screen's code box with
             // the current save spot so it is easy to write down and return later
             const goToMenu = () => {
@@ -2066,6 +2100,8 @@
                     document.getElementById('welcomeOverlay').classList.add('hidden');
                     loadLevel(game.currentLevel);
                 });
+                // Only offer to discard a run once there is one to discard
+                newGameBtnMenu.classList.remove('hidden');
             }
             
             window.addEventListener('resize', () => {
@@ -2126,11 +2162,15 @@
             
             game.powerTargetPreview = null;
             
-            if (touchStartTile && endTile) {
-                const dx = x - touchStartPos.x;
-                const dy = y - touchStartPos.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
+            const dx = x - touchStartPos.x;
+            const dy = y - touchStartPos.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const isTap = distance <= game.tileSize * 0.3;
+
+            if (isTap && !endTile) {
+                // Tapped the dead space around the grid: cancel an armed power
+                disarmPower();
+            } else if (touchStartTile && endTile) {
                 if (distance > game.tileSize * 0.3) {
                     // Swipe
                     const direction = getSwipeDirection(dx, dy);
@@ -2159,6 +2199,9 @@
             const tile = getTileAt(x, y);
             if (tile) {
                 handleTileClick(tile.row, tile.col);
+            } else {
+                // Clicked off the grid: cancel an armed power
+                disarmPower();
             }
         }
         
@@ -2288,10 +2331,13 @@
             document.getElementById('slotCount').textContent = game.powers.slot;
             document.getElementById('wandCount').textContent = game.powers.wand;
             
-            boxBtn.disabled = !unlocked || game.powers.box <= 0 || game.activePower !== null;
-            tunaBtn.disabled = !unlocked || game.powers.tuna <= 0 || game.activePower !== null;
-            slotBtn.disabled = !unlocked || game.powers.slot <= 0 || game.activePower !== null;
-            wandBtn.disabled = !unlocked || game.powers.wand <= 0 || game.activePower !== null;
+            // An armed power keeps its button tappable so it can be cancelled by
+            // tapping it again. The other buttons stay disabled while one is
+            // armed, so a stray tap cannot silently swap which power is held.
+            boxBtn.disabled = !unlocked || game.powers.box <= 0 || (game.activePower !== null && game.activePower !== 'box');
+            tunaBtn.disabled = !unlocked || game.powers.tuna <= 0 || (game.activePower !== null && game.activePower !== 'tuna');
+            slotBtn.disabled = !unlocked || game.powers.slot <= 0 || (game.activePower !== null && game.activePower !== 'slot');
+            wandBtn.disabled = !unlocked || game.powers.wand <= 0 || (game.activePower !== null && game.activePower !== 'wand');
             
             boxBtn.classList.toggle('active', game.activePower === 'box');
             tunaBtn.classList.toggle('active', game.activePower === 'tuna');
@@ -2336,12 +2382,27 @@
             } catch (e) { return null; }
         }
         
+        // Drop an armed power without spending it. Used by the power buttons
+        // (tap again to change your mind) and by tapping off the board.
+        function disarmPower() {
+            const had = !!(game.activePower || game.wandSelection);
+            game.activePower = null;
+            game.wandSelection = null;
+            game.powerTargetPreview = null;
+            if (had) {
+                updatePowerUI();
+                render();
+            }
+            return had;
+        }
+
         function activatePower(type) {
             if (game.isAnimating) return;
             if (game.activePower === type) {
-                game.activePower = null;  // toggle off
-                game.wandSelection = null;
-            } else if (game.powers[type] > 0) {
+                disarmPower();  // toggle off
+                return;
+            }
+            if (game.powers[type] > 0) {
                 game.activePower = type;
                 game.wandSelection = null;
                 sfxArm();    // a small click so arming a power feels responsive
